@@ -1,9 +1,35 @@
 import React, { useState } from 'react';
-import { SendHorizontal, Lightbulb, Code, PenTool, Compass } from 'lucide-react';
+import { SendHorizontal, Lightbulb, Code, PenTool, Compass, Construction, X, RefreshCw } from 'lucide-react';
 import './Homescreen.css';
+
+function WipToast({ onClose }) {
+  return (
+    <div className="wip-overlay" onClick={onClose}>
+      <div className="wip-toast" onClick={(e) => e.stopPropagation()}>
+        <button className="wip-close" onClick={onClose}>
+          <X size={14} />
+        </button>
+        <div className="wip-icon-wrap">
+          <Construction size={22} />
+        </div>
+        <div className="wip-body">
+          <h3 className="wip-title">Under Development</h3>
+          <p className="wip-desc">
+            uXnAI is actively being built. New features and improvements drop every day — check back tomorrow for what's new.
+          </p>
+        </div>
+        <div className="wip-footer">
+          <RefreshCw size={11} />
+          <span>Check back every day for updates</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function Homescreen() {
   const [query, setQuery] = useState('');
+  const [showWip, setShowWip] = useState(false);
 
   const suggestions = [
     { icon: <Compass size={18} />, text: "Plan a 3-day trip to Tokyo" },
@@ -22,16 +48,22 @@ function Homescreen() {
 
   return (
     <div className="home-screen">
+      {showWip && <WipToast onClose={() => setShowWip(false)} />}
+
       <div className="home-header">
-        <p className="tagline">How can I help you today?</p>
+        <p className="tagline_home">How can I help you today?</p>
+        <button className="wip-btn" onClick={() => setShowWip(true)}>
+          <Construction size={13} />
+          Work in Progress
+        </button>
       </div>
 
       <div className="main-content">
         <div className="suggestions-grid">
           {suggestions.map((item, index) => (
-            <div 
-              key={index} 
-              className="suggestion-card" 
+            <div
+              key={index}
+              className="suggestion-card"
               onClick={() => setQuery(item.text)}
             >
               <div className="suggestion-icon">{item.icon}</div>

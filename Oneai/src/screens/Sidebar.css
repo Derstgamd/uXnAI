@@ -104,11 +104,10 @@
 }
 
 .tagline {
-  font-size: 13px;
-  color: var(--muted);
-  margin-top: 10px;
-  letter-spacing: 0.3px;
-  font-weight: 300;
+  color: var(--text);
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin-top: 12px;
 }
 
 .divider {
@@ -200,4 +199,24 @@
   color: var(--muted);
   letter-spacing: 1px;
   text-transform: uppercase;
+}
+/* ── ADD THESE TO YOUR EXISTING Sidebar.css ── */
+
+.btn-email--primed {
+  border-color: #3a3a3a !important;
+  color: #e0e0e0 !important;
+  background: #161616 !important;
+}
+
+.email-hint {
+  font-size: 11px;
+  color: #444;
+  text-align: center;
+  margin-top: -4px;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }

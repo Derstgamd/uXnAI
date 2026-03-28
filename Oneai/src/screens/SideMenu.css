@@ -1,0 +1,247 @@
+.sidemenu {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 64px 0 16px 0; /* top padding clears toggle + new_chat buttons */
+  overflow: hidden;
+}
+
+/* ── Section ── */
+.sidemenu-section {
+  padding: 0 12px;
+}
+
+.section-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #555;
+  margin-bottom: 8px;
+  padding: 0 4px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  padding: 0 4px;
+}
+
+.section-header .section-label {
+  margin-bottom: 0;
+}
+
+/* ── Quick Cards ── */
+.quick-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quick-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #1e1e1e;
+  background: #141414;
+  color: #e0e0e0;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.quick-card:hover {
+  background: #1a1a1a;
+  border-color: #2e2e2e;
+  transform: translateX(2px);
+}
+
+.quick-card:hover .quick-card-arrow {
+  opacity: 1;
+  transform: translateX(2px);
+}
+
+.quick-card-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.quick-card-icon.projects {
+  background: rgba(99, 179, 237, 0.08);
+  color: #63b3ed;
+  border: 1px solid rgba(99, 179, 237, 0.15);
+}
+
+.quick-card-icon.agents {
+  background: rgba(154, 230, 180, 0.08);
+  color: #9ae6b4;
+  border: 1px solid rgba(154, 230, 180, 0.15);
+}
+
+.quick-card-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.quick-card-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #e0e0e0;
+  line-height: 1.2;
+}
+
+.quick-card-meta {
+  font-size: 10px;
+  color: #4a4a4a;
+  margin-top: 2px;
+}
+
+.quick-card-arrow {
+  color: #3a3a3a;
+  opacity: 0.5;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+/* ── Divider ── */
+.sidemenu-divider {
+  height: 1px;
+  background: #1a1a1a;
+  margin: 16px 12px;
+}
+
+/* ── Chat History ── */
+.history-section {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.new-chat-inline {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid #282828;
+  background: transparent;
+  color: #555;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.new-chat-inline:hover {
+  background: #1e1e1e;
+  color: #e0e0e0;
+  border-color: #3a3a3a;
+}
+
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-bottom: 8px;
+
+  /* subtle scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: #222 transparent;
+}
+
+.chat-list::-webkit-scrollbar {
+  width: 3px;
+}
+
+.chat-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.chat-list::-webkit-scrollbar-thumb {
+  background: #222;
+  border-radius: 2px;
+}
+
+.chat-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #888;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: all 0.12s ease;
+}
+
+.chat-item:hover {
+  background: #141414;
+  border-color: #1e1e1e;
+  color: #ccc;
+}
+
+.chat-item.active {
+  background: #161616;
+  border-color: #252525;
+  color: #e0e0e0;
+}
+
+.chat-item-icon {
+  margin-top: 2px;
+  flex-shrink: 0;
+  opacity: 0.4;
+}
+
+.chat-item.active .chat-item-icon {
+  opacity: 0.7;
+}
+
+.chat-item-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.chat-item-title {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: inherit;
+}
+
+.chat-item.active .chat-item-title {
+  font-weight: 500;
+}
+
+.chat-item-time {
+  font-size: 10px;
+  color: #3a3a3a;
+  margin-top: 2px;
+}
+
+.chat-item.active .chat-item-time {
+  color: #4a4a4a;
+}

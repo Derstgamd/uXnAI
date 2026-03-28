@@ -1,12 +1,13 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import './App.css'
 import Sidebar from './screens/Sidebar.jsx'
+import SideMenu from './screens/SideMenu.jsx'
 import Homescreen from './screens/Homescreen.jsx'
-// Import clean icons from lucide-react
-import { ChevronLeft, Menu, User, Settings } from 'lucide-react'
+import { ChevronLeft, Menu, User, Settings, MessageCirclePlus } from 'lucide-react'
 
 function App() {
   const [panelOpen, setPanelOpen] = useState(true)
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
 
   return (
     <div className="App">
@@ -16,15 +17,26 @@ function App() {
           onClick={() => setPanelOpen(!panelOpen)}
           aria-label={panelOpen ? 'Close panel' : 'Open panel'}
         >
-          {/* Conditionally render icons based on state */}
           {panelOpen ? <ChevronLeft size={20} /> : <Menu size={20} />}
         </button>
 
+        {isLoggedIn && (
+          <button className='new_chat'>
+            <MessageCirclePlus size={20} />
+          </button>
+        )}
+
         <div className="panel-content">
-          <Sidebar />
+          {isLoggedIn
+            ? <SideMenu />
+            : <Sidebar
+                onGoogleLogin={() => setIsLoggedIn(true)}
+                onEmailLogin={() => setIsLoggedIn(true)}
+              />
+          }
         </div>
 
-        {/* Footer: Only renders if the panel is CLOSED */}
+        {/* Footer: show when panel is CLOSED — restored to original behaviour */}
         {!panelOpen && (
           <div className="panel-footer">
             <button className="footer-btn" title="User Profile" aria-label="User Profile">
@@ -40,7 +52,7 @@ function App() {
       </div>
 
       <div className="content">
-        <h1>OneAI</h1>
+        <h1>uXnAI</h1>
         <Homescreen />
       </div>
     </div>

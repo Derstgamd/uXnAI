@@ -19,9 +19,19 @@ const EmailIcon = () => (
 
 export default function Sidebar({ onGoogleLogin, onEmailLogin }) {
   const [mounted, setMounted] = useState(false);
+  const [emailClicks, setEmailClicks] = useState(0);
+
   useEffect(() => setMounted(true), []);
 
   if (!mounted) return null;
+
+  const handleEmailClick = () => {
+    const next = emailClicks + 1;
+    setEmailClicks(next);
+    if (next >= 2) {
+      onEmailLogin();
+    }
+  };
 
   return (
     <div className="auth-root">
@@ -50,10 +60,19 @@ export default function Sidebar({ onGoogleLogin, onEmailLogin }) {
           <div className="sep-line" />
         </div>
 
-        <button className="btn btn-email" onClick={onEmailLogin}>
+        <button
+          className={`btn btn-email ${emailClicks === 1 ? 'btn-email--primed' : ''}`}
+          onClick={handleEmailClick}
+        >
           <span className="btn-icon"><EmailIcon /></span>
-          <span className="btn-label">Continue with Email</span>
+          <span className="btn-label">
+            {emailClicks === 1 ? 'Click again to confirm →' : 'Continue with Email'}
+          </span>
         </button>
+
+        {emailClicks === 1 && (
+          <p className="email-hint">One more click to continue</p>
+        )}
 
         <p className="footer-text">
           By continuing, you agree to our{" "}
