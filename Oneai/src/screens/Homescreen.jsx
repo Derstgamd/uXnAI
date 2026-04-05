@@ -2,8 +2,8 @@ import React, { useState, useRef } from 'react';
 import { SendHorizontal, Lightbulb, Code, PenTool, Compass, Construction, X, RefreshCw, Square, Plus } from 'lucide-react';
 import './Homescreen.css';
 
-const MODEL = 'stepfun/step-3.5-flash:free';
-const MODEL_DISPLAY = 'Step 3.5 Flash';
+const MODEL = 'nvidia/nemotron-3-nano-30b-a3b:free';
+const MODEL_DISPLAY = 'Nemotron 3 Nano';
 const API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY;
 
 function WipToast({ onClose }) {
@@ -39,6 +39,158 @@ function Homescreen() {
   const [hasStarted, setHasStarted] = useState(false);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const abortRef = useRef(null);
+
+  const parseMarkdown = (text) => {
+    const elements = [];
+    let lastIndex = 0;
+
+    // Regex patterns for markdown elements
+    const codeBlockRegex = /```[\s\S]*?```/g;
+    const inlineCodeRegex = /`[^`]+`/g;
+    const headerRegex = /^#{1,6}\s+.+$/gm;
+    const boldRegex = /\*\*[^*]+\*\*/g;
+    const italicRegex = /\*[^*]+\*/g;
+    const listItemRegex = /^[\-\*]\s+.+$/gm;
+
+    // Split by lines first to handle multiline markdown
+    const lines = text.split('\n');
+    let elementIndex = 0;
+
+    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+      const line = lines[lineIndex];
+      
+      // Check for headers
+      const headerMatch = line.match(/^(#{1,6})\s+(.+)$/);
+      if (headerMatch) {
+        const level = headerMatch[1].length;
+        const content = headerMatch[2];
+        const headingTag = `h${level}`;
+        elements.push(
+          React.createElement(
+            headingTag,
+            { key: elementIndex++, className: `markdown-h${level}` },
+            content
+          )
+        );
+        continue;
+      }
+
+      // Check for list items
+      if (line.match(/^[\-\*]\s+/)) {
+        const content = line.replace(/^[\-\*]\s+/, '');
+        elements.push(
+          <li key={elementIndex++} className="markdown-li">{parseLine(content)}</li>
+        );
+        continue;
+      }
+
+      // Check for code blocks
+      const codeBlockMatch = line.match(/^```[\s\S]*?```$/);
+      if (codeBlockMatch) {
+        const codeContent = line
+          .replace(/^```([\w]*)\n?/, '')
+          .replace(/\n?```$/, '');
+        elements.push(
+          <pre key={elementIndex++} className="markdown-code-block">
+            <code>{codeContent}</code>
+          </pre>
+        );
+        continue;
+      }
+
+      // Parse regular lines with inline formatting
+      if (line.trim()) {
+        elements.push(
+          <p key={elementIndex++} className="markdown-p">
+            {parseLine(line)}
+          </p>
+        );
+      } else if (elements.length > 0) {
+        // Add spacing between paragraphs
+        elements.push(<div key={elementIndex++} className="markdown-spacing" />);
+      }
+    }
+
+    return elements;
+  };
+
+  const parseLine = (text) => {
+    const parts = [];
+    let lastIndex = 0;
+
+    // Code inline
+    const inlineCodeRegex = /`([^`]+)`/g;
+    let codeMatch;
+    const codeMatches = [];
+    while ((codeMatch = inlineCodeRegex.exec(text)) !== null) {
+      codeMatches.push({
+        start: codeMatch.index,
+        end: inlineCodeRegex.lastIndex,
+        content: codeMatch[1],
+        type: 'code',
+      });
+    }
+
+    // Bold
+    const boldRegex = /\*\*([^*]+)\*\*/g;
+    let boldMatch;
+    const boldMatches = [];
+    while ((boldMatch = boldRegex.exec(text)) !== null) {
+      boldMatches.push({
+        start: boldMatch.index,
+        end: boldRegex.lastIndex,
+        content: boldMatch[1],
+        type: 'bold',
+      });
+    }
+
+    // Italic
+    const italicRegex = /\*([^*]+)\*/g;
+    let italicMatch;
+    const italicMatches = [];
+    while ((italicMatch = italicRegex.exec(text)) !== null) {
+      italicMatches.push({
+        start: italicMatch.index,
+        end: italicRegex.lastIndex,
+        content: italicMatch[1],
+        type: 'italic',
+      });
+    }
+
+    const allMatches = [...codeMatches, ...boldMatches, ...italicMatches].sort(
+      (a, b) => a.start - b.start
+    );
+
+    allMatches.forEach((match, i) => {
+      if (match.start > lastIndex) {
+        parts.push(text.substring(lastIndex, match.start));
+      }
+
+      if (match.type === 'code') {
+        parts.push(
+          <code key={`code-${i}`} className="markdown-inline-code">
+            {match.content}
+          </code>
+        );
+      } else if (match.type === 'bold') {
+        parts.push(
+          <strong key={`bold-${i}`}>{match.content}</strong>
+        );
+      } else if (match.type === 'italic') {
+        parts.push(
+          <em key={`italic-${i}`}>{match.content}</em>
+        );
+      }
+
+      lastIndex = match.end;
+    });
+
+    if (lastIndex < text.length) {
+      parts.push(text.substring(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : text;
+  };
 
   const parseMarkdownBold = (text) => {
     const parts = text.split(/(\*\*.*?\*\*)/g);
@@ -190,7 +342,7 @@ function Homescreen() {
                   {msg.role === 'user' ? 'You' : 'uXnAI'}
                 </span>
                 <p className="message-content">
-                  {parseMarkdownBold(msg.content)}
+                  {parseMarkdown(msg.content)}
                   {streaming && i === messages.length - 1 && msg.role === 'assistant' && (
                     <span className="cursor-blink" />
                   )}

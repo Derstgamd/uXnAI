@@ -3,15 +3,21 @@ import './App.css'
 import Sidebar from './screens/Sidebar.jsx'
 import SideMenu from './screens/SideMenu.jsx'
 import Homescreen from './screens/Homescreen.jsx'
+import Welcome from './screens/Welcome.jsx'
 import { ChevronLeft, Menu, User, Settings, MessageCirclePlus } from 'lucide-react'
 
 function App() {
   const [panelOpen, setPanelOpen] = useState(true)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
+  const [showWelcome, setShowWelcome] = useState(true)
+
+  if (showWelcome) {
+    return <Welcome onTryFree={() => setShowWelcome(false)} />
+  }
 
   return (
     <div className="App">
-      <div className={`panel ${panelOpen ? 'open' : 'closed'}`}>
+      <div className={`panel ${panelOpen ? 'open' : 'closed'} ${!showWelcome ? 'after-welcome' : ''}`}>
         <button
           className="panel-toggle"
           onClick={() => setPanelOpen(!panelOpen)}

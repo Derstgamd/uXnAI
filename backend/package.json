@@ -12,8 +12,13 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "argon2": "^0.44.0",
+    "dotenv": "^17.3.1",
     "drizzle-orm": "^0.45.2",
-    "hono": "^4.12.9"
+    "hono": "^4.12.9",
+    "jose": "^6.2.2",
+    "nanoid": "^5.1.7",
+    "postgres": "^3.4.8"
   },
   "devDependencies": {
     "@hono/node-server": "^1.19.12",

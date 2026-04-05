@@ -27,11 +27,15 @@
 }
 
 .panel.open {
-  width: 30%; /* Use px for consistency or 30% if you prefer */
+  width: 18%; /* Use px for consistency or 30% if you prefer */
 }
 
 .panel.closed {
   width: 5%; /* Slightly wider to accommodate button padding comfortably */
+}
+
+.panel.open.after-welcome {
+  width: 30%;
 }
 
 /* ── Toggle button ── */
