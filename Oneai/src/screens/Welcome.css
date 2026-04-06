@@ -250,6 +250,50 @@
   }
 }
 
+@keyframes blink {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
+    opacity: 0;
+  }
+}
+
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.welcome-subtitle.typewriter {
+  min-height: 1.3rem;
+  display: inline-block;
+}
+
+.rotating-square {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background-color: #ffc107;
+  margin-left: 8px;
+  animation: rotate 2s linear infinite;
+  vertical-align: middle;
+  border-radius: 3px;
+}
+
+.typewriter-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.3em;
+  background-color: #ffc107;
+  margin-left: 2px;
+  animation: blink 0.7s infinite;
+  vertical-align: middle;
+}
+
 @media (max-width: 768px) {
   .welcome-title {
     font-size: 2.5rem;

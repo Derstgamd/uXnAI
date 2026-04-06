@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import "./Welcome.css";
 
 const GoogleIcon = () => (
@@ -20,8 +20,63 @@ const EmailIcon = () => (
 export default function Welcome({ onTryFree }) {
   const [mounted, setMounted] = useState(false);
   const [emailClicks, setEmailClicks] = useState(0);
+  const [displayedText, setDisplayedText] = useState('');
+  const texts = [
+    'Welcome to the consensus',
+    'Powered by OneAI',
+    'Make smarter decisions',
+    'Real-time insights',
+    'Your AI companion',
+    'Helping you stay informed',
+  ];
+  const animationState = useRef({ charIndex: 0, textIndex: 0, isErasing: false, isHolding: false });
 
   useEffect(() => setMounted(true), []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    
+    const interval = setInterval(() => {
+      const state = animationState.current;
+      const currentText = texts[state.textIndex];
+      
+      if (state.isHolding) {
+        // Skip - waiting 
+        return;
+      }
+      
+      if (!state.isErasing) {
+        // Typing phase
+        if (state.charIndex < currentText.length) {
+          setDisplayedText(currentText.slice(0, state.charIndex + 1));
+          state.charIndex++;
+        } else if (!state.isHolding) {
+          // Finished typing - start holding
+          state.isHolding = true;
+          setTimeout(() => {
+            state.isHolding = false;
+            state.isErasing = true;
+          }, 2000);
+        }
+      } else {
+        // Erasing phase
+        if (state.charIndex > 0) {
+          state.charIndex--;
+          setDisplayedText(currentText.slice(0, state.charIndex));
+        } else {
+          // Finished erasing - hold before next text
+          state.isHolding = true;
+          setTimeout(() => {
+            state.isHolding = false;
+            state.isErasing = false;
+            state.textIndex = (state.textIndex + 1) % texts.length;
+          }, 2000);
+        }
+      }
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [mounted, texts]);
 
   if (!mounted) return null;
 
@@ -46,7 +101,7 @@ export default function Welcome({ onTryFree }) {
       <div className="welcome-container">
         <div className="welcome-content">
           <h1 className="welcome-title">Welcome to OneAI</h1>
-          <p className="welcome-subtitle">Welcome to the consensus</p>
+          <p className="welcome-subtitle typewriter">{displayedText}<span className="rotating-square"></span></p>
 
           <button className="btn btn-try-free" onClick={onTryFree}>
             Try it for free
