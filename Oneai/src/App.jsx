@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import './App.css'
 import Sidebar from './screens/Sidebar.jsx'
 import SideMenu from './screens/SideMenu.jsx'
@@ -6,18 +7,13 @@ import Homescreen from './screens/Homescreen.jsx'
 import Welcome from './screens/Welcome.jsx'
 import { ChevronLeft, Menu, User, Settings, MessageCirclePlus } from 'lucide-react'
 
-function App() {
+function MainLayout() {
   const [panelOpen, setPanelOpen] = useState(true)
   const [isLoggedIn, setIsLoggedIn] = useState(false)
-  const [showWelcome, setShowWelcome] = useState(true)
-
-  if (showWelcome) {
-    return <Welcome onTryFree={() => setShowWelcome(false)} />
-  }
 
   return (
     <div className="App">
-      <div className={`panel ${panelOpen ? 'open' : 'closed'} ${!showWelcome ? 'after-welcome' : ''}`}>
+      <div className={`panel ${panelOpen ? 'open' : 'closed'} after-welcome`}>
         <button
           className="panel-toggle"
           onClick={() => setPanelOpen(!panelOpen)}
@@ -62,6 +58,22 @@ function App() {
         <Homescreen />
       </div>
     </div>
+  )
+}
+
+function WelcomeRoute() {
+  const navigate = useNavigate()
+
+  return <Welcome onTryFree={() => navigate('/chat')} />
+}
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<WelcomeRoute />} />
+      <Route path="/chat" element={<MainLayout />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   )
 }
 
