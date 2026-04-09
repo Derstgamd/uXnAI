@@ -1,0 +1,138 @@
+ .settings-root {
+   height: 100%;
+   width: 100%;
+   max-width: 820px;
+   margin: 0 auto;
+   padding: 28px 20px;
+   color: var(--fg);
+ }
+ 
+ .settings-header {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 12px;
+   margin-bottom: 16px;
+ }
+ 
+ .settings-title {
+   font-size: 18px;
+   font-weight: 800;
+   letter-spacing: -0.01em;
+ }
+ 
+ .settings-spacer {
+   width: 80px;
+ }
+ 
+ .settings-back {
+   display: inline-flex;
+   align-items: center;
+   gap: 8px;
+   padding: 8px 10px;
+   border-radius: 10px;
+   border: 1px solid var(--border);
+   background: var(--surface);
+   color: var(--muted);
+   cursor: pointer;
+   transition: all 0.15s ease;
+ }
+ 
+ .settings-back:hover {
+   border-color: color-mix(in srgb, var(--border) 60%, var(--accent) 40%);
+   color: var(--fg);
+ }
+ 
+ .settings-card {
+   border: 1px solid var(--border);
+   background: var(--surface);
+   border-radius: 14px;
+   padding: 16px;
+ }
+ 
+ .settings-row {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 14px;
+   padding: 10px 0;
+ }
+ 
+ .settings-row-left {
+   display: flex;
+   flex-direction: column;
+   gap: 4px;
+   min-width: 0;
+ }
+ 
+ .settings-row-title {
+   font-size: 13px;
+   font-weight: 700;
+ }
+ 
+ .settings-row-sub {
+   font-size: 12px;
+   color: var(--muted);
+ }
+ 
+ .settings-divider {
+   height: 1px;
+   background: var(--border);
+   margin: 10px 0;
+ }
+ 
+ .theme-toggle {
+   display: inline-flex;
+   align-items: center;
+   gap: 8px;
+   padding: 8px 12px;
+   border-radius: 999px;
+   border: 1px solid var(--border);
+   background: var(--surface2);
+   color: var(--fg);
+   cursor: pointer;
+   transition: all 0.15s ease;
+   white-space: nowrap;
+   font-size: 12px;
+   font-weight: 700;
+ }
+ 
+ .theme-toggle:hover {
+   border-color: color-mix(in srgb, var(--border) 60%, var(--accent) 40%);
+ }
+ 
+ .settings-actions {
+   display: flex;
+   gap: 10px;
+   flex-wrap: wrap;
+   justify-content: flex-end;
+ }
+ 
+ .settings-btn {
+   display: inline-flex;
+   align-items: center;
+   gap: 8px;
+   padding: 9px 12px;
+   border-radius: 10px;
+   border: 1px solid var(--border);
+   background: var(--surface2);
+   color: var(--fg);
+   cursor: pointer;
+   transition: all 0.15s ease;
+   font-size: 12px;
+   font-weight: 700;
+ }
+ 
+ .settings-btn:hover {
+   border-color: color-mix(in srgb, var(--border) 60%, var(--accent) 40%);
+ }
+ 
+ .settings-btn.danger {
+   border-color: color-mix(in srgb, var(--border) 40%, #ef4444 60%);
+   color: #ef4444;
+ }
+ 
+ .settings-btn.danger:hover {
+   background: rgba(239, 68, 68, 0.08);
+ }
+ 

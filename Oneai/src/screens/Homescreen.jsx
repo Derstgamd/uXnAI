@@ -1,10 +1,37 @@
-import React, { useState, useRef } from 'react';
-import { SendHorizontal, Lightbulb, Code, PenTool, Compass, Construction, X, RefreshCw, Square, Plus } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { SendHorizontal, Lightbulb, Code, PenTool, Compass, Construction, X, RefreshCw, Square, Plus, ThumbsUp, ThumbsDown, Copy, ChevronDown } from 'lucide-react';
 import './Homescreen.css';
 
 const MODEL = 'nvidia/nemotron-3-nano-30b-a3b:free';
 const MODEL_DISPLAY = 'Nemotron 3 Nano';
 const API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY;
+const TEXT_SESSIONS_KEY = 'oneai:textSessions';
+const ACTIVE_TEXT_SESSION_KEY = 'oneai:activeTextSessionId';
+
+const readJson = (key, fallback) => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+};
+
+const writeJson = (key, value) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // ignore
+  }
+};
+
+const slugTitleFromText = (text) => {
+  const t = (text || '').replace(/\s+/g, ' ').trim();
+  if (!t) return 'New chat';
+  const firstLine = t.split('\n')[0].trim();
+  return firstLine.length > 60 ? `${firstLine.slice(0, 60)}…` : firstLine;
+};
 
 function WipToast({ onClose }) {
   return (
@@ -38,128 +65,61 @@ function Homescreen() {
   const [streaming, setStreaming] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const [messageFeedback, setMessageFeedback] = useState({});
+  const [copiedMessageId, setCopiedMessageId] = useState(null);
+  const [activeSessionId, setActiveSessionId] = useState(() => localStorage.getItem(ACTIVE_TEXT_SESSION_KEY) || '');
+  const [showScrollButton, setShowScrollButton] = useState(false);
   const abortRef = useRef(null);
+  const inputRef = useRef(null);
+  const messagesListRef = useRef(null);
+  const autoScrollRef = useRef(true);
 
-  const parseMarkdown = (text) => {
-    const elements = [];
-    let lastIndex = 0;
-
-    // Regex patterns for markdown elements
-    const codeBlockRegex = /```[\s\S]*?```/g;
-    const inlineCodeRegex = /`[^`]+`/g;
-    const headerRegex = /^#{1,6}\s+.+$/gm;
-    const boldRegex = /\*\*[^*]+\*\*/g;
-    const italicRegex = /\*[^*]+\*/g;
-    const listItemRegex = /^[\-\*]\s+.+$/gm;
-
-    // Split by lines first to handle multiline markdown
-    const lines = text.split('\n');
-    let elementIndex = 0;
-
-    for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
-      const line = lines[lineIndex];
-      
-      // Check for headers
-      const headerMatch = line.match(/^(#{1,6})\s+(.+)$/);
-      if (headerMatch) {
-        const level = headerMatch[1].length;
-        const content = headerMatch[2];
-        const headingTag = `h${level}`;
-        elements.push(
-          React.createElement(
-            headingTag,
-            { key: elementIndex++, className: `markdown-h${level}` },
-            content
-          )
-        );
-        continue;
-      }
-
-      // Check for list items
-      if (line.match(/^[\-\*]\s+/)) {
-        const content = line.replace(/^[\-\*]\s+/, '');
-        elements.push(
-          <li key={elementIndex++} className="markdown-li">{parseLine(content)}</li>
-        );
-        continue;
-      }
-
-      // Check for code blocks
-      const codeBlockMatch = line.match(/^```[\s\S]*?```$/);
-      if (codeBlockMatch) {
-        const codeContent = line
-          .replace(/^```([\w]*)\n?/, '')
-          .replace(/\n?```$/, '');
-        elements.push(
-          <pre key={elementIndex++} className="markdown-code-block">
-            <code>{codeContent}</code>
-          </pre>
-        );
-        continue;
-      }
-
-      // Parse regular lines with inline formatting
-      if (line.trim()) {
-        elements.push(
-          <p key={elementIndex++} className="markdown-p">
-            {parseLine(line)}
-          </p>
-        );
-      } else if (elements.length > 0) {
-        // Add spacing between paragraphs
-        elements.push(<div key={elementIndex++} className="markdown-spacing" />);
-      }
-    }
-
-    return elements;
+  const handleScroll = (e) => {
+    const element = e.target;
+    const isAtBottom =
+      Math.abs(
+        element.scrollHeight - element.clientHeight - element.scrollTop
+      ) < 50;
+    setShowScrollButton(!isAtBottom);
+    autoScrollRef.current = isAtBottom;
   };
 
-  const parseLine = (text) => {
+  const scrollToBottom = () => {
+    if (messagesListRef.current) {
+      messagesListRef.current.scrollTo({
+        top: messagesListRef.current.scrollHeight,
+        behavior: 'smooth',
+      });
+      autoScrollRef.current = true;
+    }
+  };
+
+  // Auto-scroll when new messages arrive
+  useEffect(() => {
+    if (autoScrollRef.current && messagesListRef.current) {
+      setTimeout(() => {
+        messagesListRef.current?.scrollTo({
+          top: messagesListRef.current?.scrollHeight,
+          behavior: 'smooth',
+        });
+      }, 0);
+    }
+  }, [messages]);
+
+  const parseInline = (text) => {
     const parts = [];
     let lastIndex = 0;
-
-    // Code inline
-    const inlineCodeRegex = /`([^`]+)`/g;
-    let codeMatch;
-    const codeMatches = [];
-    while ((codeMatch = inlineCodeRegex.exec(text)) !== null) {
-      codeMatches.push({
-        start: codeMatch.index,
-        end: inlineCodeRegex.lastIndex,
-        content: codeMatch[1],
-        type: 'code',
+    const tokenRegex = /`([^`]+)`|\*\*([^*]+)\*\*|~~([^~]+)~~|\*([^*]+)\*/g;
+    const allMatches = [];
+    let match;
+    while ((match = tokenRegex.exec(text)) !== null) {
+      allMatches.push({
+        start: match.index,
+        end: tokenRegex.lastIndex,
+        content: match[1] || match[2] || match[3] || match[4],
+        type: match[1] ? 'code' : match[2] ? 'bold' : match[3] ? 'strike' : 'italic',
       });
     }
-
-    // Bold
-    const boldRegex = /\*\*([^*]+)\*\*/g;
-    let boldMatch;
-    const boldMatches = [];
-    while ((boldMatch = boldRegex.exec(text)) !== null) {
-      boldMatches.push({
-        start: boldMatch.index,
-        end: boldRegex.lastIndex,
-        content: boldMatch[1],
-        type: 'bold',
-      });
-    }
-
-    // Italic
-    const italicRegex = /\*([^*]+)\*/g;
-    let italicMatch;
-    const italicMatches = [];
-    while ((italicMatch = italicRegex.exec(text)) !== null) {
-      italicMatches.push({
-        start: italicMatch.index,
-        end: italicRegex.lastIndex,
-        content: italicMatch[1],
-        type: 'italic',
-      });
-    }
-
-    const allMatches = [...codeMatches, ...boldMatches, ...italicMatches].sort(
-      (a, b) => a.start - b.start
-    );
 
     allMatches.forEach((match, i) => {
       if (match.start > lastIndex) {
@@ -175,6 +135,10 @@ function Homescreen() {
       } else if (match.type === 'bold') {
         parts.push(
           <strong key={`bold-${i}`}>{match.content}</strong>
+        );
+      } else if (match.type === 'strike') {
+        parts.push(
+          <del key={`strike-${i}`}>{match.content}</del>
         );
       } else if (match.type === 'italic') {
         parts.push(
@@ -192,14 +156,208 @@ function Homescreen() {
     return parts.length > 0 ? parts : text;
   };
 
-  const parseMarkdownBold = (text) => {
-    const parts = text.split(/(\*\*.*?\*\*)/g);
-    return parts.map((part, i) => {
-      if (part.startsWith('**') && part.endsWith('**')) {
-        return <strong key={i}>{part.slice(2, -2)}</strong>;
+  const parseMarkdown = (text) => {
+    const elements = [];
+    const lines = text.split('\n');
+    let elementIndex = 0;
+    let inCodeBlock = false;
+    let codeLang = '';
+    let codeLines = [];
+    let listType = null;
+    let listItems = [];
+
+    const flushList = () => {
+      if (listItems.length === 0) return;
+      const ListTag = listType === 'ordered' ? 'ol' : 'ul';
+      elements.push(
+        <ListTag key={`list-${elementIndex++}`} className="markdown-list">
+          {listItems.map((item, idx) => (
+            <li key={`li-${idx}`} className={`markdown-li ${item.checked !== null ? 'markdown-li-task' : ''}`}>
+              {item.checked !== null && (
+                <span className={`task-checkbox ${item.checked ? 'checked' : ''}`} />
+              )}
+              <span>{parseInline(item.content)}</span>
+            </li>
+          ))}
+        </ListTag>
+      );
+      listItems = [];
+      listType = null;
+    };
+
+    const splitPipeRow = (row) => {
+      const normalized = row.trim().replace(/^\|/, '').replace(/\|$/, '');
+      return normalized.split('|').map((cell) => cell.trim());
+    };
+
+    const normalizeTableCandidateRow = (row) => row.replace(/^\s*#{1,6}\s+/, '').trim();
+
+    const isSeparatorRow = (row) => {
+      const normalized = row.trim().replace(/^\|/, '').replace(/\|$/, '');
+      if (!normalized) return false;
+      return normalized.split('|').every((cell) => /^:?-{3,}:?$/.test(cell.trim()));
+    };
+
+    for (let i = 0; i < lines.length; i += 1) {
+      const line = lines[i];
+      const trimmed = line.trim();
+
+      if (trimmed.startsWith('```')) {
+        if (!inCodeBlock) {
+          flushList();
+          inCodeBlock = true;
+          codeLang = trimmed.slice(3).trim();
+          codeLines = [];
+        } else {
+          elements.push(
+            <pre key={`code-${elementIndex++}`} className="markdown-code-block">
+              {codeLang ? <div className="markdown-code-lang">{codeLang}</div> : null}
+              <code>{codeLines.join('\n')}</code>
+            </pre>
+          );
+          inCodeBlock = false;
+          codeLang = '';
+          codeLines = [];
+        }
+        continue;
       }
-      return part;
-    });
+
+      if (inCodeBlock) {
+        codeLines.push(line);
+        continue;
+      }
+
+      const nextLine = lines[i + 1] || '';
+      const candidateLine = normalizeTableCandidateRow(line);
+      const candidateNextLine = normalizeTableCandidateRow(nextLine);
+      const looksLikePipeRow = candidateLine.includes('|') && splitPipeRow(candidateLine).length >= 2;
+      const nextIsPipeRow = candidateNextLine.includes('|') && splitPipeRow(candidateNextLine).length >= 2;
+
+      if (looksLikePipeRow && (isSeparatorRow(candidateNextLine) || nextIsPipeRow)) {
+        flushList();
+        const headerCells = splitPipeRow(candidateLine);
+        const hasSeparator = isSeparatorRow(candidateNextLine);
+        const alignments = (hasSeparator ? splitPipeRow(candidateNextLine) : headerCells).map((cell) => {
+          if (!hasSeparator) return 'left';
+          const trimmedCell = cell.trim();
+          if (trimmedCell.startsWith(':') && trimmedCell.endsWith(':')) return 'center';
+          if (trimmedCell.endsWith(':')) return 'right';
+          return 'left';
+        });
+
+        const bodyRows = [];
+        let j = i + (hasSeparator ? 2 : 1);
+        while (j < lines.length) {
+          const bodyCandidate = normalizeTableCandidateRow(lines[j]);
+          if (!bodyCandidate || !bodyCandidate.includes('|')) break;
+          bodyRows.push(splitPipeRow(bodyCandidate));
+          j += 1;
+        }
+
+        elements.push(
+          <div key={`table-wrap-${elementIndex++}`} className="markdown-table-wrap">
+            <table className="markdown-table">
+              <thead>
+                <tr>
+                  {headerCells.map((cell, idx) => (
+                    <th key={`th-${idx}`} style={{ textAlign: alignments[idx] || 'left' }}>
+                      {parseInline(cell)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              {bodyRows.length > 0 && (
+                <tbody>
+                  {bodyRows.map((row, rowIdx) => (
+                    <tr key={`tr-${rowIdx}`}>
+                      {headerCells.map((_, colIdx) => (
+                        <td key={`td-${rowIdx}-${colIdx}`} style={{ textAlign: alignments[colIdx] || 'left' }}>
+                          {parseInline(row[colIdx] || '')}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              )}
+            </table>
+          </div>
+        );
+
+        i = j - 1;
+        continue;
+      }
+
+      const headerMatch = line.match(/^(#{1,6})\s+(.+)$/);
+      if (headerMatch) {
+        flushList();
+        const level = headerMatch[1].length;
+        const content = headerMatch[2];
+        const headingTag = `h${level}`;
+        elements.push(React.createElement(headingTag, { key: elementIndex++, className: `markdown-h${level}` }, parseInline(content)));
+        continue;
+      }
+
+      if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+        flushList();
+        elements.push(<hr key={`hr-${elementIndex++}`} className="markdown-hr" />);
+        continue;
+      }
+
+      const quoteMatch = line.match(/^>\s?(.*)$/);
+      if (quoteMatch) {
+        flushList();
+        elements.push(
+          <blockquote key={`quote-${elementIndex++}`} className="markdown-quote">
+            {parseInline(quoteMatch[1])}
+          </blockquote>
+        );
+        continue;
+      }
+
+      const unordered = line.match(/^\s*[-*+]\s+(.*)$/);
+      const ordered = line.match(/^\s*\d+\.\s+(.*)$/);
+      if (unordered || ordered) {
+        const currentType = ordered ? 'ordered' : 'unordered';
+        const content = (unordered?.[1] || ordered?.[1] || '').trim();
+        const taskMatch = content.match(/^\[( |x|X)\]\s+(.*)$/);
+
+        if (listType && listType !== currentType) {
+          flushList();
+        }
+
+        listType = currentType;
+        listItems.push({
+          checked: taskMatch ? taskMatch[1].toLowerCase() === 'x' : null,
+          content: taskMatch ? taskMatch[2] : content,
+        });
+        continue;
+      }
+
+      if (!trimmed) {
+        flushList();
+        elements.push(<div key={`space-${elementIndex++}`} className="markdown-spacing" />);
+        continue;
+      }
+
+      flushList();
+      elements.push(
+        <p key={`p-${elementIndex++}`} className="markdown-p">
+          {parseInline(line)}
+        </p>
+      );
+    }
+
+    if (inCodeBlock && codeLines.length > 0) {
+      elements.push(
+        <pre key={`code-open-${elementIndex++}`} className="markdown-code-block">
+          {codeLang ? <div className="markdown-code-lang">{codeLang}</div> : null}
+          <code>{codeLines.join('\n')}</code>
+        </pre>
+      );
+    }
+
+    flushList();
+    return elements;
   };
 
   const suggestions = [
@@ -217,18 +375,9 @@ function Homescreen() {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!query.trim() || streaming) return;
-
-    const userMessage = query.trim();
-    setQuery('');
-    setHasStarted(true);
-
-    const updatedMessages = [...messages, { role: 'user', content: userMessage }];
-    setMessages(updatedMessages);
+  const requestAssistantResponse = async (updatedMessages) => {
     setStreaming(true);
-    setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+    setMessages([...updatedMessages, { role: 'assistant', content: '' }]);
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -307,6 +456,182 @@ function Homescreen() {
     }
   };
 
+  const persistSession = (sessionId, nextMessages, titleHint) => {
+    const sessions = readJson(TEXT_SESSIONS_KEY, []);
+    const id = sessionId || '';
+    if (!id) return;
+    const existing = Array.isArray(sessions) ? sessions : [];
+    const idx = existing.findIndex((s) => String(s.id) === String(id));
+    const updatedAt = Date.now();
+    const nextTitle = titleHint || (idx >= 0 ? existing[idx]?.title : '') || 'New chat';
+    const payload = { id, title: nextTitle, updatedAt, messages: nextMessages };
+    const nextSessions = idx >= 0
+      ? [...existing.slice(0, idx), { ...existing[idx], ...payload }, ...existing.slice(idx + 1)]
+      : [payload, ...existing];
+    writeJson(TEXT_SESSIONS_KEY, nextSessions);
+    window.dispatchEvent(new Event('oneai:textSessionsUpdated'));
+  };
+
+  useEffect(() => {
+    const onNewChat = () => {
+      setActiveSessionId('');
+      localStorage.setItem(ACTIVE_TEXT_SESSION_KEY, '');
+      setMessages([]);
+      setQuery('');
+      setHasStarted(false);
+      setMessageFeedback({});
+      window.setTimeout(() => inputRef.current?.focus(), 0);
+    };
+
+    const onOpen = (e) => {
+      const id = e?.detail?.id;
+      if (!id) return;
+      const sessions = readJson(TEXT_SESSIONS_KEY, []);
+      const found = (Array.isArray(sessions) ? sessions : []).find((s) => String(s.id) === String(id));
+      if (!found) return;
+      setActiveSessionId(String(id));
+      localStorage.setItem(ACTIVE_TEXT_SESSION_KEY, String(id));
+      setMessages(found.messages || []);
+      setHasStarted((found.messages || []).length > 0);
+      setMessageFeedback({});
+      window.setTimeout(() => inputRef.current?.focus(), 0);
+    };
+
+    window.addEventListener('oneai:newChat', onNewChat);
+    window.addEventListener('oneai:openTextSession', onOpen);
+    return () => {
+      window.removeEventListener('oneai:newChat', onNewChat);
+      window.removeEventListener('oneai:openTextSession', onOpen);
+    };
+  }, []);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+
+    const onGlobalKeyDown = (e) => {
+      const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
+      const metaOrCtrl = isMac ? e.metaKey : e.ctrlKey;
+      
+      // Ctrl/Cmd+K: Focus input
+      if (metaOrCtrl && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        inputRef.current?.focus();
+        return;
+      }
+      
+      // Ctrl/Cmd+C: Copy last assistant message
+      if (metaOrCtrl && (e.key === 'c' || e.key === 'C') && !inputRef.current?.contains(document.activeElement)) {
+        e.preventDefault();
+        const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
+        if (lastAssistant?.content) {
+          handleCopy(messages.indexOf(lastAssistant), lastAssistant.content);
+        }
+        return;
+      }
+      
+      // Alt+N: New chat
+      if ((isMac ? e.altKey : e.altKey) && (e.key === 'n' || e.key === 'N')) {
+        e.preventDefault();
+        window.dispatchEvent(new Event('oneai:newChat'));
+        return;
+      }
+      
+      // Escape: Stop streaming
+      if (e.key === 'Escape' && streaming) {
+        e.preventDefault();
+        handleStop();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', onGlobalKeyDown);
+    return () => window.removeEventListener('keydown', onGlobalKeyDown);
+  }, [messages, streaming]);
+
+  const sendMessage = async (rawText) => {
+    const userMessage = (rawText || '').trim();
+    if (!userMessage || streaming) return;
+
+    setHasStarted(true);
+    setQuery('');
+
+    let sessionId = activeSessionId;
+    if (!sessionId) {
+      sessionId = crypto?.randomUUID?.() || String(Date.now());
+      setActiveSessionId(sessionId);
+      localStorage.setItem(ACTIVE_TEXT_SESSION_KEY, sessionId);
+    }
+
+    const updatedMessages = [...messages, { role: 'user', content: userMessage }];
+    if (updatedMessages.filter((m) => m.role === 'user').length === 1) {
+      const title = slugTitleFromText(userMessage);
+      persistSession(sessionId, updatedMessages, title);
+    } else {
+      persistSession(sessionId, updatedMessages);
+    }
+
+    await requestAssistantResponse(updatedMessages);
+  };
+
+  const handleSendClick = async () => {
+    await sendMessage(query);
+  };
+
+  const handleFeedback = (messageIndex, type) => {
+    setMessageFeedback((prev) => {
+      const current = prev[messageIndex];
+      return {
+        ...prev,
+        [messageIndex]: current === type ? null : type,
+      };
+    });
+  };
+
+  const handleCopy = async (messageIndex, text) => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedMessageId(messageIndex);
+      window.setTimeout(() => {
+        setCopiedMessageId((prev) => (prev === messageIndex ? null : prev));
+      }, 1400);
+    } catch {
+      // Clipboard may fail in unsupported contexts.
+    }
+  };
+
+  const handleRegenerate = async (assistantIndex) => {
+    if (streaming) return;
+
+    let userIndex = assistantIndex - 1;
+    while (userIndex >= 0 && messages[userIndex]?.role !== 'user') {
+      userIndex -= 1;
+    }
+    if (userIndex < 0) return;
+
+    const contextMessages = messages.slice(0, userIndex + 1);
+    setMessages(contextMessages);
+    setHasStarted(true);
+    await requestAssistantResponse(contextMessages);
+  };
+
+  const handleInputKeyDown = (e) => {
+    if (e.isComposing) return;
+    if (e.key === 'Escape' && streaming) {
+      e.preventDefault();
+      handleStop();
+      return;
+    }
+
+    if (e.key !== 'Enter') return;
+
+    const shouldSend = !e.shiftKey || e.ctrlKey || e.metaKey;
+    if (!shouldSend) return;
+
+    e.preventDefault();
+    sendMessage(query);
+  };
+
   return (
     <div className="home-screen">
       {showWip && <WipToast onClose={() => setShowWip(false)} />}
@@ -335,70 +660,128 @@ function Homescreen() {
             ))}
           </div>
         ) : (
-          <div className="messages-list">
+          <div className="messages-list" ref={messagesListRef} onScroll={handleScroll}>
             {messages.map((msg, i) => (
               <div key={i} className={`message message--${msg.role}`}>
                 <span className="message-role">
                   {msg.role === 'user' ? 'You' : 'uXnAI'}
                 </span>
-                <p className="message-content">
+                <div className="message-content">
                   {parseMarkdown(msg.content)}
                   {streaming && i === messages.length - 1 && msg.role === 'assistant' && (
                     <span className="cursor-blink" />
                   )}
-                </p>
+                </div>
+                {msg.role === 'assistant' && msg.content && (
+                  <div className="message-actions">
+                    <button
+                      type="button"
+                      className={`message-action-btn ${messageFeedback[i] === 'like' ? 'active' : ''}`}
+                      onClick={() => handleFeedback(i, 'like')}
+                      title="Like response"
+                      aria-label="Like response"
+                    >
+                      <ThumbsUp size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      className={`message-action-btn ${messageFeedback[i] === 'dislike' ? 'active' : ''}`}
+                      onClick={() => handleFeedback(i, 'dislike')}
+                      title="Dislike response"
+                      aria-label="Dislike response"
+                    >
+                      <ThumbsDown size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      className="message-action-btn"
+                      onClick={() => handleCopy(i, msg.content)}
+                      title="Copy response"
+                      aria-label="Copy response"
+                    >
+                      <Copy size={14} />
+                      <span className="action-label">{copiedMessageId === i ? 'Copied' : 'Copy'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="message-action-btn"
+                      onClick={() => handleRegenerate(i)}
+                      disabled={streaming}
+                      title="Regenerate response"
+                      aria-label="Regenerate response"
+                    >
+                      <RefreshCw size={14} />
+                      <span className="action-label">Regenerate</span>
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
+            {showScrollButton && (
+              <button
+                type="button"
+                className="scroll-to-bottom-btn"
+                onClick={scrollToBottom}
+                title="Scroll to latest"
+                aria-label="Scroll to latest"
+              >
+                <ChevronDown size={20} />
+              </button>
+            )}
           </div>
         )}
       </div>
 
       {/* Input area */}
-      <div className="input-wrapper">
-        <div className="model-dropdown-wrapper">
-          <button 
-            className="model-tag" 
-            onClick={() => setShowModelDropdown(!showModelDropdown)}
-            type="button"
-          >
-            <span className="model-dot" />
-            {MODEL_DISPLAY}
-            <span className="dropdown-arrow">▼</span>
-          </button>
-          {showModelDropdown && (
-            <div className="model-dropdown-menu">
-              <div className="model-option selected">
-                <span className="model-dot" />
-                {MODEL_DISPLAY}
+      <div className="input-wrapper" onMouseDown={() => inputRef.current?.focus()}>
+        <div>
+          <div className="model-dropdown-wrapper">
+            <button 
+              className="model-tag" 
+              onClick={() => setShowModelDropdown(!showModelDropdown)}
+              type="button"
+            >
+              <span className="model-dot" />
+              {MODEL_DISPLAY}
+              <span className="dropdown-arrow">▼</span>
+            </button>
+            {showModelDropdown && (
+              <div className="model-dropdown-menu">
+                <div className="model-option selected">
+                  <span className="model-dot" />
+                  {MODEL_DISPLAY}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
+
+          <div className="input-container" role="group" aria-label="Chat input">
+            <button type="button" className="plus-btn" title="Attach">
+              <Plus size={18} />
+            </button>
+
+            <textarea
+              ref={inputRef}
+              className="input-bar"
+              placeholder="Message uXnAI..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={handleInputKeyDown}
+              disabled={streaming}
+              rows={1}
+            />
+
+            {streaming ? (
+              <button type="button" className="send-btn stop-btn" onClick={handleStop}>
+                <Square size={16} fill="currentColor" />
+              </button>
+            ) : (
+              <button type="button" className="send-btn" onClick={handleSendClick} disabled={!query.trim()}>
+                <SendHorizontal size={20} />
+              </button>
+            )}
+          </div>
         </div>
-
-        <form className="input-container" onSubmit={handleSubmit}>
-          <button type="button" className="plus-btn" title="Attach">
-            <Plus size={18} />
-          </button>
-
-          <input
-            type="text"
-            className="input-bar"
-            placeholder="Message uXnAI..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            disabled={streaming}
-          />
-
-          {streaming ? (
-            <button type="button" className="send-btn stop-btn" onClick={handleStop}>
-              <Square size={16} fill="currentColor" />
-            </button>
-          ) : (
-            <button type="submit" className="send-btn" disabled={!query.trim()}>
-              <SendHorizontal size={20} />
-            </button>
-          )}
-        </form>
       </div>
     </div>
   );

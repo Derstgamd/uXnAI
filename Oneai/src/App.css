@@ -11,9 +11,28 @@ body {
 code,
 pre,
 kbd,
-samp,
-textarea {
+samp {
   font-family: Consolas, 'Courier New', monospace;
+}
+
+:root {
+  --bg: #0a0a0a;
+  --fg: #f0f0f0;
+  --muted: #a0a0a0;
+  --surface: #111111;
+  --surface2: #1a1a1a;
+  --border: #222222;
+  --accent: #e8ff47;
+}
+
+html[data-theme='light'] {
+  --bg: #f6f7fb;
+  --fg: #0e0f14;
+  --muted: #4b5563;
+  --surface: #ffffff;
+  --surface2: #f1f3f7;
+  --border: #e5e7eb;
+  --accent: #5b5cff;
 }
 
 .App {
@@ -21,8 +40,8 @@ textarea {
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-  background: #0a0a0a;
-  color: #f0f0f0;
+  background: var(--bg);
+  color: var(--fg);
   font-family: 'Open Sans', sans-serif;
 }
 
@@ -30,8 +49,8 @@ textarea {
 .panel {
   position: relative;
   height: 100%;
-  background: #111111;
-  border-right: 1px solid #222;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
   transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
   display: flex; /* Added flex to help align children */
   flex-direction: column;
@@ -168,5 +187,14 @@ textarea {
 .content {
   flex: 1;
   padding: 40px;
-  overflow-y: hidden;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.content > h1 {
+  margin: 0 0 28px;
+  line-height: 1.1;
+  flex-shrink: 0;
 }
