@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { SendHorizontal, Lightbulb, Code, PenTool, Compass, Construction, X, RefreshCw, Square, Plus, ThumbsUp, ThumbsDown, Copy, ChevronDown } from 'lucide-react';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 import './Homescreen.css';
 
 const MODEL = 'nvidia/nemotron-3-nano-30b-a3b:free';
@@ -73,6 +75,7 @@ function Homescreen() {
   const inputRef = useRef(null);
   const messagesListRef = useRef(null);
   const autoScrollRef = useRef(true);
+  const debugRunIdRef = useRef(`run-${Date.now()}`);
 
   const handleScroll = (e) => {
     const element = e.target;
@@ -80,6 +83,9 @@ function Homescreen() {
       Math.abs(
         element.scrollHeight - element.clientHeight - element.scrollTop
       ) < 50;
+    // #region agent log
+    fetch('http://127.0.0.1:7585/ingest/45195724-e99d-4d0f-9128-ee9e91ae2d13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c9358d'},body:JSON.stringify({sessionId:'c9358d',runId:debugRunIdRef.current,hypothesisId:'H4',location:'Homescreen.jsx:handleScroll',message:'messages list scroll metrics',data:{scrollTop:element.scrollTop,scrollHeight:element.scrollHeight,clientHeight:element.clientHeight,isAtBottom},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     setShowScrollButton(!isAtBottom);
     autoScrollRef.current = isAtBottom;
   };
@@ -97,11 +103,17 @@ function Homescreen() {
   // Auto-scroll when new messages arrive
   useEffect(() => {
     if (autoScrollRef.current && messagesListRef.current) {
+      // #region agent log
+      fetch('http://127.0.0.1:7585/ingest/45195724-e99d-4d0f-9128-ee9e91ae2d13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c9358d'},body:JSON.stringify({sessionId:'c9358d',runId:debugRunIdRef.current,hypothesisId:'H5',location:'Homescreen.jsx:useEffect[messages]-beforeScroll',message:'auto scroll eligible on messages update',data:{autoScroll:autoScrollRef.current,messageCount:messages.length,hasListRef:Boolean(messagesListRef.current),currentScrollHeight:messagesListRef.current?.scrollHeight ?? null,currentClientHeight:messagesListRef.current?.clientHeight ?? null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       setTimeout(() => {
         messagesListRef.current?.scrollTo({
           top: messagesListRef.current?.scrollHeight,
           behavior: 'smooth',
         });
+        // #region agent log
+        fetch('http://127.0.0.1:7585/ingest/45195724-e99d-4d0f-9128-ee9e91ae2d13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c9358d'},body:JSON.stringify({sessionId:'c9358d',runId:debugRunIdRef.current,hypothesisId:'H5',location:'Homescreen.jsx:useEffect[messages]-afterScroll',message:'auto scroll called',data:{targetTop:messagesListRef.current?.scrollHeight ?? null,actualScrollTop:messagesListRef.current?.scrollTop ?? null},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
       }, 0);
     }
   }, [messages]);
@@ -109,15 +121,16 @@ function Homescreen() {
   const parseInline = (text) => {
     const parts = [];
     let lastIndex = 0;
-    const tokenRegex = /`([^`]+)`|\*\*([^*]+)\*\*|~~([^~]+)~~|\*([^*]+)\*/g;
+    // Updated regex to include math: $...$  but not $$...$$ (block math)
+    const tokenRegex = /\$(?!\$)([^\$\n]+?)\$(?!\$)|`([^`]+)`|\*\*([^*]+)\*\*|~~([^~]+)~~|\*([^*]+)\*/g;
     const allMatches = [];
     let match;
     while ((match = tokenRegex.exec(text)) !== null) {
       allMatches.push({
         start: match.index,
         end: tokenRegex.lastIndex,
-        content: match[1] || match[2] || match[3] || match[4],
-        type: match[1] ? 'code' : match[2] ? 'bold' : match[3] ? 'strike' : 'italic',
+        content: match[1] || match[2] || match[3] || match[4] || match[5],
+        type: match[1] ? 'math' : match[2] ? 'code' : match[3] ? 'bold' : match[4] ? 'strike' : 'italic',
       });
     }
 
@@ -126,7 +139,16 @@ function Homescreen() {
         parts.push(text.substring(lastIndex, match.start));
       }
 
-      if (match.type === 'code') {
+      if (match.type === 'math') {
+        try {
+          const html = katex.renderToString(match.content, { throwOnError: false });
+          parts.push(
+            <span key={`math-${i}`} className="markdown-inline-math" dangerouslySetInnerHTML={{ __html: html }} />
+          );
+        } catch {
+          parts.push(`$${match.content}$`);
+        }
+      } else if (match.type === 'code') {
         parts.push(
           <code key={`code-${i}`} className="markdown-inline-code">
             {match.content}
@@ -156,13 +178,15 @@ function Homescreen() {
     return parts.length > 0 ? parts : text;
   };
 
-  const parseMarkdown = (text) => {
+    const parseMarkdown = (text) => {
     const elements = [];
     const lines = text.split('\n');
     let elementIndex = 0;
     let inCodeBlock = false;
+    let inMathBlock = false;
     let codeLang = '';
     let codeLines = [];
+    let mathLines = [];
     let listType = null;
     let listItems = [];
 
@@ -227,6 +251,66 @@ function Homescreen() {
         continue;
       }
 
+      // Check for block math ($$...$$)
+      if (trimmed.startsWith('$$')) {
+        if (!inMathBlock) {
+          flushList();
+          inMathBlock = true;
+          mathLines = [];
+          const mathContent = trimmed.slice(2).trim();
+          if (mathContent && trimmed.endsWith('$$') && mathContent !== '') {
+            // Single line math block
+            try {
+              const html = katex.renderToString(mathContent, { displayMode: true, throwOnError: false });
+              elements.push(
+                <div key={`math-block-${elementIndex++}`} className="markdown-math-block">
+                  <div dangerouslySetInnerHTML={{ __html: html }} />
+                </div>
+              );
+            } catch {
+              elements.push(<p key={`math-error-${elementIndex++}`} className="markdown-p">{line}</p>);
+            }
+            inMathBlock = false;
+          } else if (mathContent) {
+            mathLines.push(mathContent);
+          }
+        } else {
+          const mathContent = trimmed.slice(0, -2).trim();
+          if (mathContent) mathLines.push(mathContent);
+          
+          try {
+            const fullMath = mathLines.join('\n');
+            const html = katex.renderToString(fullMath, { displayMode: true, throwOnError: false });
+            elements.push(
+              <div key={`math-block-${elementIndex++}`} className="markdown-math-block">
+                <div dangerouslySetInnerHTML={{ __html: html }} />
+              </div>
+            );
+          } catch {
+            elements.push(<p key={`math-error-${elementIndex++}`} className="markdown-p">{mathLines.join('\n')}</p>);
+          }
+          inMathBlock = false;
+          mathLines = [];
+        }
+        continue;
+      }
+
+      if (inMathBlock) {
+        mathLines.push(line);
+        continue;
+      }
+
+      // Check for headings first (before tables) to prevent mistaking "## Title | Something" as a table
+      const headerMatch = line.match(/^(#{1,6})\s+(.+)$/);
+      if (headerMatch) {
+        flushList();
+        const level = headerMatch[1].length;
+        const content = headerMatch[2];
+        const headingTag = `h${level}`;
+        elements.push(React.createElement(headingTag, { key: elementIndex++, className: `markdown-h${level}` }, parseInline(content)));
+        continue;
+      }
+
       const nextLine = lines[i + 1] || '';
       const candidateLine = normalizeTableCandidateRow(line);
       const candidateNextLine = normalizeTableCandidateRow(nextLine);
@@ -287,16 +371,6 @@ function Homescreen() {
         continue;
       }
 
-      const headerMatch = line.match(/^(#{1,6})\s+(.+)$/);
-      if (headerMatch) {
-        flushList();
-        const level = headerMatch[1].length;
-        const content = headerMatch[2];
-        const headingTag = `h${level}`;
-        elements.push(React.createElement(headingTag, { key: elementIndex++, className: `markdown-h${level}` }, parseInline(content)));
-        continue;
-      }
-
       if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
         flushList();
         elements.push(<hr key={`hr-${elementIndex++}`} className="markdown-hr" />);
@@ -339,12 +413,35 @@ function Homescreen() {
         continue;
       }
 
+      // Collect consecutive lines into a paragraph (joined with spaces, no <br>)
       flushList();
+      const paragraphLines = [line];
+      let j = i + 1;
+      while (j < lines.length) {
+        const nextTrimmed = lines[j].trim();
+        if (!nextTrimmed) break; // Stop at empty line
+        
+        // Stop if next line is a special block element
+        if (nextTrimmed.startsWith('#') || 
+            nextTrimmed.startsWith('>') || 
+            nextTrimmed.match(/^\s*[-*+]\s+/) || 
+            nextTrimmed.match(/^\s*\d+\.\s+/) ||
+            nextTrimmed.startsWith('```')) break;
+        
+        paragraphLines.push(lines[j]);
+        j += 1;
+      }
+
+      // Join all lines with spaces (normal markdown behavior)
+      const paragraphText = paragraphLines.map(pl => pl.trim()).join(' ');
+
       elements.push(
         <p key={`p-${elementIndex++}`} className="markdown-p">
-          {parseInline(line)}
+          {parseInline(paragraphText)}
         </p>
       );
+
+      i = j - 1;
     }
 
     if (inCodeBlock && codeLines.length > 0) {
@@ -550,6 +647,9 @@ function Homescreen() {
 
   const sendMessage = async (rawText) => {
     const userMessage = (rawText || '').trim();
+    // #region agent log
+    fetch('http://127.0.0.1:7585/ingest/45195724-e99d-4d0f-9128-ee9e91ae2d13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c9358d'},body:JSON.stringify({sessionId:'c9358d',runId:debugRunIdRef.current,hypothesisId:'H3',location:'Homescreen.jsx:sendMessage-entry',message:'sendMessage invoked',data:{rawLength:(rawText||'').length,trimmedLength:userMessage.length,streaming,activeSessionId:activeSessionId || null,messageCount:messages.length},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!userMessage || streaming) return;
 
     setHasStarted(true);
@@ -574,6 +674,9 @@ function Homescreen() {
   };
 
   const handleSendClick = async () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7585/ingest/45195724-e99d-4d0f-9128-ee9e91ae2d13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c9358d'},body:JSON.stringify({sessionId:'c9358d',runId:debugRunIdRef.current,hypothesisId:'H3',location:'Homescreen.jsx:handleSendClick',message:'send button clicked',data:{queryLength:query.length,trimmedLength:query.trim().length,streaming},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     await sendMessage(query);
   };
 
@@ -616,6 +719,9 @@ function Homescreen() {
   };
 
   const handleInputKeyDown = (e) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7585/ingest/45195724-e99d-4d0f-9128-ee9e91ae2d13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c9358d'},body:JSON.stringify({sessionId:'c9358d',runId:debugRunIdRef.current,hypothesisId:'H1',location:'Homescreen.jsx:handleInputKeyDown-entry',message:'textarea keydown captured',data:{key:e.key,shiftKey:e.shiftKey,ctrlKey:e.ctrlKey,metaKey:e.metaKey,isComposing:e.isComposing,streaming,queryLength:query.length,activeElementTag:document.activeElement?.tagName || null},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (e.isComposing) return;
     if (e.key === 'Escape' && streaming) {
       e.preventDefault();
@@ -623,14 +729,24 @@ function Homescreen() {
       return;
     }
 
-    if (e.key !== 'Enter') return;
+    if (e.key !== 'Enter' && e.key !== 'NumpadEnter') return;
 
     const shouldSend = !e.shiftKey || e.ctrlKey || e.metaKey;
+    // #region agent log
+    fetch('http://127.0.0.1:7585/ingest/45195724-e99d-4d0f-9128-ee9e91ae2d13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c9358d'},body:JSON.stringify({sessionId:'c9358d',runId:debugRunIdRef.current,hypothesisId:'H2',location:'Homescreen.jsx:handleInputKeyDown-enter',message:'enter decision evaluated',data:{shouldSend,shiftKey:e.shiftKey,ctrlKey:e.ctrlKey,metaKey:e.metaKey,streaming,trimmedLength:query.trim().length},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!shouldSend) return;
 
     e.preventDefault();
-    sendMessage(query);
+    sendMessage(e.currentTarget.value);
   };
+
+  useEffect(() => {
+    const list = messagesListRef.current;
+    // #region agent log
+    fetch('http://127.0.0.1:7585/ingest/45195724-e99d-4d0f-9128-ee9e91ae2d13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c9358d'},body:JSON.stringify({sessionId:'c9358d',runId:debugRunIdRef.current,hypothesisId:'H4',location:'Homescreen.jsx:layoutProbe',message:'layout metrics sampled',data:{hasStarted,messages:messages.length,listExists:Boolean(list),listScrollHeight:list?.scrollHeight ?? null,listClientHeight:list?.clientHeight ?? null,listOverflowY:list ? window.getComputedStyle(list).overflowY : null},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+  }, [hasStarted, messages.length]);
 
   return (
     <div className="home-screen">
@@ -733,7 +849,7 @@ function Homescreen() {
       </div>
 
       {/* Input area */}
-      <div className="input-wrapper" onMouseDown={() => inputRef.current?.focus()}>
+      <div className="input-wrapper">
         <div>
           <div className="model-dropdown-wrapper">
             <button 
