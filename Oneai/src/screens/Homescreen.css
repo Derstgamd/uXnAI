@@ -845,3 +845,127 @@
   background: #222;
   color: #e8ff47;
 }
+.insight-loader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #f59e0b;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 0;
+}
+ 
+.insight-loader-icon {
+  animation: spin 1.4s linear infinite;
+  flex-shrink: 0;
+}
+ 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.markdown-code-block {
+  padding: 0 !important; /* override old padding — header/code handle it now */
+}
+ 
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid #222;
+  background: #111;
+  border-radius: 8px 8px 0 0;
+}
+ 
+.markdown-code-block code {
+  display: block;
+  padding: 14px 16px;
+  overflow-x: auto;
+}
+ 
+/* ── Code copy button ── */
+.code-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: 1px solid #2d2d2d;
+  border-radius: 6px;
+  color: #666;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  letter-spacing: 0.02em;
+}
+ 
+.code-copy-btn:hover {
+  background: #1a1a1a;
+  border-color: #3d3d3d;
+  color: #bbb;
+}
+ 
+.code-copy-btn--copied {
+  background: rgba(232, 255, 71, 0.08);
+  border-color: rgba(232, 255, 71, 0.3);
+  color: #e8ff47;
+}
+ 
+.code-copy-btn--copied:hover {
+  background: rgba(232, 255, 71, 0.12);
+  border-color: rgba(232, 255, 71, 0.4);
+  color: #e8ff47;
+}
+ 
+/* ── Insight loader ── */
+.insight-loader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #f59e0b;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 0;
+}
+ 
+.insight-loader-icon {
+  animation: spin 1.4s linear infinite;
+  flex-shrink: 0;
+}
+ 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+ 
+/* ── Beautified messages-list scrollbar ── */
+.messages-list {
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a2a transparent;
+}
+ 
+.messages-list::-webkit-scrollbar {
+  display: block !important; /* override the hide-all rule */
+  width: 4px;
+}
+ 
+.messages-list::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 8px 0;
+}
+ 
+.messages-list::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 99px;
+  transition: background 0.2s;
+}
+ 
+.messages-list:hover::-webkit-scrollbar-thumb {
+  background: #3a3a3a;
+}
+ 
+.messages-list::-webkit-scrollbar-thumb:hover {
+  background: #e8ff4766;
+}

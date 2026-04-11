@@ -44,3 +44,6 @@ Thumbs.db
 *.pem
 *.key
 secrets.json
+
+
+code_test/

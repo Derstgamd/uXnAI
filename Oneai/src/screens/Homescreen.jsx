@@ -1,31 +1,24 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { SendHorizontal, Lightbulb, Code, PenTool, Compass, Construction, X, RefreshCw, Square, Plus, ThumbsUp, ThumbsDown, Copy, ChevronDown } from 'lucide-react';
+import { SendHorizontal, Lightbulb, Code, PenTool, Compass, Construction, X, RefreshCw, Square, Plus, ThumbsUp, ThumbsDown, Copy, ChevronDown, Cpu, Check } from 'lucide-react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import './Homescreen.css';
 
-const MODEL = 'nvidia/nemotron-3-nano-30b-a3b:free';
-const MODEL_DISPLAY = 'Nemotron 3 Nano';
-const API_KEY = import.meta.env.VITE_OPENROUTER_API_KEY;
+const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const TEXT_SESSIONS_KEY = 'oneai:textSessions';
 const ACTIVE_TEXT_SESSION_KEY = 'oneai:activeTextSessionId';
+const MODEL_DISPLAY = 'uXnAI · 3-Model Pipeline';
 
 const readJson = (key, fallback) => {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return fallback;
     return JSON.parse(raw);
-  } catch {
-    return fallback;
-  }
+  } catch { return fallback; }
 };
 
 const writeJson = (key, value) => {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // ignore
-  }
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
 };
 
 const slugTitleFromText = (text) => {
@@ -35,16 +28,53 @@ const slugTitleFromText = (text) => {
   return firstLine.length > 60 ? `${firstLine.slice(0, 60)}…` : firstLine;
 };
 
+// ── Code block with copy button ──────────────────────────────────────────────
+function CodeBlock({ lang, code }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
+  };
+
+  return (
+    <pre className="markdown-code-block">
+      <div className="code-block-header">
+        <span className="markdown-code-lang">{lang || 'code'}</span>
+        <button
+          type="button"
+          className={`code-copy-btn ${copied ? 'code-copy-btn--copied' : ''}`}
+          onClick={handleCopy}
+          title="Copy code"
+        >
+          {copied ? <Check size={12} /> : <Copy size={12} />}
+          <span>{copied ? 'Copied!' : 'Copy'}</span>
+        </button>
+      </div>
+      <code>{code}</code>
+    </pre>
+  );
+}
+
+// ── Insight loader ────────────────────────────────────────────────────────────
+function InsightLoader() {
+  return (
+    <div className="insight-loader">
+      <Cpu size={13} className="insight-loader-icon" />
+      <span>Consulting specialist models…</span>
+    </div>
+  );
+}
+
 function WipToast({ onClose }) {
   return (
     <div className="wip-overlay" onClick={onClose}>
       <div className="wip-toast" onClick={(e) => e.stopPropagation()}>
-        <button className="wip-close" onClick={onClose}>
-          <X size={14} />
-        </button>
-        <div className="wip-icon-wrap">
-          <Construction size={22} />
-        </div>
+        <button className="wip-close" onClick={onClose}><X size={14} /></button>
+        <div className="wip-icon-wrap"><Construction size={22} /></div>
         <div className="wip-body">
           <h3 className="wip-title">Under Development</h3>
           <p className="wip-desc">
@@ -64,395 +94,226 @@ function Homescreen() {
   const [query, setQuery] = useState('');
   const [showWip, setShowWip] = useState(false);
   const [messages, setMessages] = useState([]);
-  const [streaming, setStreaming] = useState(false);
+  const [phase, setPhase] = useState('idle'); // 'idle' | 'gathering' | 'streaming'
   const [hasStarted, setHasStarted] = useState(false);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [messageFeedback, setMessageFeedback] = useState({});
   const [copiedMessageId, setCopiedMessageId] = useState(null);
-  const [activeSessionId, setActiveSessionId] = useState(() => localStorage.getItem(ACTIVE_TEXT_SESSION_KEY) || '');
+  const [activeSessionId, setActiveSessionId] = useState(
+    () => localStorage.getItem(ACTIVE_TEXT_SESSION_KEY) || ''
+  );
   const [showScrollButton, setShowScrollButton] = useState(false);
   const abortRef = useRef(null);
   const inputRef = useRef(null);
   const messagesListRef = useRef(null);
   const autoScrollRef = useRef(true);
-  const debugRunIdRef = useRef(`run-${Date.now()}`);
 
+  const isStreaming = phase !== 'idle';
+
+  // ── Scroll ──────────────────────────────────────────────────────────────────
   const handleScroll = (e) => {
-    const element = e.target;
-    const isAtBottom =
-      Math.abs(
-        element.scrollHeight - element.clientHeight - element.scrollTop
-      ) < 50;
-    // #region agent log
-    fetch('http://127.0.0.1:7585/ingest/45195724-e99d-4d0f-9128-ee9e91ae2d13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c9358d'},body:JSON.stringify({sessionId:'c9358d',runId:debugRunIdRef.current,hypothesisId:'H4',location:'Homescreen.jsx:handleScroll',message:'messages list scroll metrics',data:{scrollTop:element.scrollTop,scrollHeight:element.scrollHeight,clientHeight:element.clientHeight,isAtBottom},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    setShowScrollButton(!isAtBottom);
-    autoScrollRef.current = isAtBottom;
+    const el = e.target;
+    const atBottom = Math.abs(el.scrollHeight - el.clientHeight - el.scrollTop) < 50;
+    setShowScrollButton(!atBottom);
+    autoScrollRef.current = atBottom;
   };
 
   const scrollToBottom = () => {
-    if (messagesListRef.current) {
-      messagesListRef.current.scrollTo({
-        top: messagesListRef.current.scrollHeight,
-        behavior: 'smooth',
-      });
-      autoScrollRef.current = true;
-    }
+    messagesListRef.current?.scrollTo({ top: messagesListRef.current.scrollHeight, behavior: 'smooth' });
+    autoScrollRef.current = true;
   };
 
-  // Auto-scroll when new messages arrive
   useEffect(() => {
-    if (autoScrollRef.current && messagesListRef.current) {
-      // #region agent log
-      fetch('http://127.0.0.1:7585/ingest/45195724-e99d-4d0f-9128-ee9e91ae2d13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c9358d'},body:JSON.stringify({sessionId:'c9358d',runId:debugRunIdRef.current,hypothesisId:'H5',location:'Homescreen.jsx:useEffect[messages]-beforeScroll',message:'auto scroll eligible on messages update',data:{autoScroll:autoScrollRef.current,messageCount:messages.length,hasListRef:Boolean(messagesListRef.current),currentScrollHeight:messagesListRef.current?.scrollHeight ?? null,currentClientHeight:messagesListRef.current?.clientHeight ?? null},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      setTimeout(() => {
-        messagesListRef.current?.scrollTo({
-          top: messagesListRef.current?.scrollHeight,
-          behavior: 'smooth',
-        });
-        // #region agent log
-        fetch('http://127.0.0.1:7585/ingest/45195724-e99d-4d0f-9128-ee9e91ae2d13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c9358d'},body:JSON.stringify({sessionId:'c9358d',runId:debugRunIdRef.current,hypothesisId:'H5',location:'Homescreen.jsx:useEffect[messages]-afterScroll',message:'auto scroll called',data:{targetTop:messagesListRef.current?.scrollHeight ?? null,actualScrollTop:messagesListRef.current?.scrollTop ?? null},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-      }, 0);
+    if (autoScrollRef.current) {
+      setTimeout(() => messagesListRef.current?.scrollTo({ top: messagesListRef.current?.scrollHeight, behavior: 'smooth' }), 0);
     }
   }, [messages]);
 
+  // ── Inline parser ────────────────────────────────────────────────────────────
   const parseInline = (text) => {
     const parts = [];
     let lastIndex = 0;
-    // Updated regex to include math: $...$  but not $$...$$ (block math)
-    const tokenRegex = /\$(?!\$)([^\$\n]+?)\$(?!\$)|`([^`]+)`|\*\*([^*]+)\*\*|~~([^~]+)~~|\*([^*]+)\*/g;
+    const tokenRegex = /\\\((.+?)\\\)|\$(?!\$)([^$\n]+?)\$(?!\$)|`([^`]+)`|\*\*([^*]+)\*\*|~~([^~]+)~~|\*([^*]+)\*/g;
     const allMatches = [];
     let match;
+
     while ((match = tokenRegex.exec(text)) !== null) {
-      allMatches.push({
-        start: match.index,
-        end: tokenRegex.lastIndex,
-        content: match[1] || match[2] || match[3] || match[4] || match[5],
-        type: match[1] ? 'math' : match[2] ? 'code' : match[3] ? 'bold' : match[4] ? 'strike' : 'italic',
-      });
+      let type, content;
+      if      (match[1] !== undefined) { type = 'math';   content = match[1]; }
+      else if (match[2] !== undefined) { type = 'math';   content = match[2]; }
+      else if (match[3] !== undefined) { type = 'code';   content = match[3]; }
+      else if (match[4] !== undefined) { type = 'bold';   content = match[4]; }
+      else if (match[5] !== undefined) { type = 'strike'; content = match[5]; }
+      else                             { type = 'italic'; content = match[6]; }
+      allMatches.push({ start: match.index, end: tokenRegex.lastIndex, content, type });
     }
 
-    allMatches.forEach((match, i) => {
-      if (match.start > lastIndex) {
-        parts.push(text.substring(lastIndex, match.start));
-      }
-
-      if (match.type === 'math') {
+    allMatches.forEach((m, i) => {
+      if (m.start > lastIndex) parts.push(text.substring(lastIndex, m.start));
+      if (m.type === 'math') {
         try {
-          const html = katex.renderToString(match.content, { throwOnError: false });
-          parts.push(
-            <span key={`math-${i}`} className="markdown-inline-math" dangerouslySetInnerHTML={{ __html: html }} />
-          );
-        } catch {
-          parts.push(`$${match.content}$`);
-        }
-      } else if (match.type === 'code') {
-        parts.push(
-          <code key={`code-${i}`} className="markdown-inline-code">
-            {match.content}
-          </code>
-        );
-      } else if (match.type === 'bold') {
-        parts.push(
-          <strong key={`bold-${i}`}>{match.content}</strong>
-        );
-      } else if (match.type === 'strike') {
-        parts.push(
-          <del key={`strike-${i}`}>{match.content}</del>
-        );
-      } else if (match.type === 'italic') {
-        parts.push(
-          <em key={`italic-${i}`}>{match.content}</em>
-        );
-      }
-
-      lastIndex = match.end;
+          const html = katex.renderToString(m.content, { throwOnError: false });
+          parts.push(<span key={`math-${i}`} className="markdown-inline-math" dangerouslySetInnerHTML={{ __html: html }} />);
+        } catch { parts.push(`$${m.content}$`); }
+      } else if (m.type === 'code')   parts.push(<code    key={`c-${i}`} className="markdown-inline-code">{m.content}</code>);
+      else if (m.type === 'bold')     parts.push(<strong  key={`b-${i}`}>{m.content}</strong>);
+      else if (m.type === 'strike')   parts.push(<del     key={`s-${i}`}>{m.content}</del>);
+      else if (m.type === 'italic')   parts.push(<em      key={`e-${i}`}>{m.content}</em>);
+      lastIndex = m.end;
     });
 
-    if (lastIndex < text.length) {
-      parts.push(text.substring(lastIndex));
-    }
-
+    if (lastIndex < text.length) parts.push(text.substring(lastIndex));
     return parts.length > 0 ? parts : text;
   };
 
-    const parseMarkdown = (text) => {
+  // ── Block parser ─────────────────────────────────────────────────────────────
+  const parseMarkdown = (text) => {
     const elements = [];
     const lines = text.split('\n');
-    let elementIndex = 0;
-    let inCodeBlock = false;
-    let inMathBlock = false;
-    let codeLang = '';
-    let codeLines = [];
-    let mathLines = [];
-    let listType = null;
-    let listItems = [];
+    let ei = 0;
+    let inCode = false, inMath = false, inLatex = false;
+    let codeLang = '', codeLines = [], mathLines = [];
+    let listType = null, listItems = [];
 
     const flushList = () => {
-      if (listItems.length === 0) return;
-      const ListTag = listType === 'ordered' ? 'ol' : 'ul';
+      if (!listItems.length) return;
+      const Tag = listType === 'ordered' ? 'ol' : 'ul';
       elements.push(
-        <ListTag key={`list-${elementIndex++}`} className="markdown-list">
+        <Tag key={`list-${ei++}`} className="markdown-list">
           {listItems.map((item, idx) => (
-            <li key={`li-${idx}`} className={`markdown-li ${item.checked !== null ? 'markdown-li-task' : ''}`}>
-              {item.checked !== null && (
-                <span className={`task-checkbox ${item.checked ? 'checked' : ''}`} />
-              )}
+            <li key={idx} className={`markdown-li ${item.checked !== null ? 'markdown-li-task' : ''}`}>
+              {item.checked !== null && <span className={`task-checkbox ${item.checked ? 'checked' : ''}`} />}
               <span>{parseInline(item.content)}</span>
             </li>
           ))}
-        </ListTag>
+        </Tag>
       );
-      listItems = [];
-      listType = null;
+      listItems = []; listType = null;
     };
 
-    const splitPipeRow = (row) => {
-      const normalized = row.trim().replace(/^\|/, '').replace(/\|$/, '');
-      return normalized.split('|').map((cell) => cell.trim());
+    const mathBlock = (content, key) => {
+      try {
+        const html = katex.renderToString(content, { displayMode: true, throwOnError: false });
+        return <div key={key} className="markdown-math-block"><div dangerouslySetInnerHTML={{ __html: html }} /></div>;
+      } catch { return <p key={key} className="markdown-p">{content}</p>; }
     };
 
-    const normalizeTableCandidateRow = (row) => row.replace(/^\s*#{1,6}\s+/, '').trim();
+    const splitPipe = (row) => row.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+    const normRow   = (row) => row.replace(/^\s*#{1,6}\s+/, '').trim();
+    const isSep     = (row) => { const n = row.trim().replace(/^\|/, '').replace(/\|$/, ''); return n && n.split('|').every(c => /^:?-{3,}:?$/.test(c.trim())); };
+    const isPipe    = (row) => row.includes('|') && splitPipe(row).length >= 2;
 
-    const isSeparatorRow = (row) => {
-      const normalized = row.trim().replace(/^\|/, '').replace(/\|$/, '');
-      if (!normalized) return false;
-      return normalized.split('|').every((cell) => /^:?-{3,}:?$/.test(cell.trim()));
-    };
-
-    for (let i = 0; i < lines.length; i += 1) {
+    for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
-      const trimmed = line.trim();
+      const t = line.trim();
 
-      if (trimmed.startsWith('```')) {
-        if (!inCodeBlock) {
-          flushList();
-          inCodeBlock = true;
-          codeLang = trimmed.slice(3).trim();
-          codeLines = [];
+      // Code blocks — renders as <CodeBlock> with copy button
+      if (t.startsWith('```')) {
+        if (!inCode) {
+          flushList(); inCode = true; codeLang = t.slice(3).trim(); codeLines = [];
         } else {
-          elements.push(
-            <pre key={`code-${elementIndex++}`} className="markdown-code-block">
-              {codeLang ? <div className="markdown-code-lang">{codeLang}</div> : null}
-              <code>{codeLines.join('\n')}</code>
-            </pre>
-          );
-          inCodeBlock = false;
-          codeLang = '';
-          codeLines = [];
+          elements.push(<CodeBlock key={`code-${ei++}`} lang={codeLang} code={codeLines.join('\n')} />);
+          inCode = false; codeLang = ''; codeLines = [];
         }
         continue;
       }
+      if (inCode) { codeLines.push(line); continue; }
 
-      if (inCodeBlock) {
-        codeLines.push(line);
-        continue;
-      }
-
-      // Check for block math ($$...$$)
-      if (trimmed.startsWith('$$')) {
-        if (!inMathBlock) {
-          flushList();
-          inMathBlock = true;
-          mathLines = [];
-          const mathContent = trimmed.slice(2).trim();
-          if (mathContent && trimmed.endsWith('$$') && mathContent !== '') {
-            // Single line math block
-            try {
-              const html = katex.renderToString(mathContent, { displayMode: true, throwOnError: false });
-              elements.push(
-                <div key={`math-block-${elementIndex++}`} className="markdown-math-block">
-                  <div dangerouslySetInnerHTML={{ __html: html }} />
-                </div>
-              );
-            } catch {
-              elements.push(<p key={`math-error-${elementIndex++}`} className="markdown-p">{line}</p>);
-            }
-            inMathBlock = false;
-          } else if (mathContent) {
-            mathLines.push(mathContent);
-          }
+      // $$ math
+      if (t.startsWith('$$')) {
+        if (!inMath) {
+          flushList(); inMath = true; mathLines = [];
+          const rest = t.slice(2).trim();
+          if (rest && t.endsWith('$$') && rest !== '$$') { elements.push(mathBlock(rest.endsWith('$$') ? rest.slice(0,-2).trim() : rest, `mb-${ei++}`)); inMath = false; }
+          else if (rest) mathLines.push(rest);
         } else {
-          const mathContent = trimmed.slice(0, -2).trim();
-          if (mathContent) mathLines.push(mathContent);
-          
-          try {
-            const fullMath = mathLines.join('\n');
-            const html = katex.renderToString(fullMath, { displayMode: true, throwOnError: false });
-            elements.push(
-              <div key={`math-block-${elementIndex++}`} className="markdown-math-block">
-                <div dangerouslySetInnerHTML={{ __html: html }} />
-              </div>
-            );
-          } catch {
-            elements.push(<p key={`math-error-${elementIndex++}`} className="markdown-p">{mathLines.join('\n')}</p>);
-          }
-          inMathBlock = false;
-          mathLines = [];
+          const rest = t.slice(0,-2).trim();
+          if (rest) mathLines.push(rest);
+          elements.push(mathBlock(mathLines.join('\n'), `mb-${ei++}`));
+          inMath = false; mathLines = [];
         }
         continue;
       }
+      if (inMath) { mathLines.push(line); continue; }
 
-      if (inMathBlock) {
-        mathLines.push(line);
-        continue;
-      }
-
-      // Check for headings first (before tables) to prevent mistaking "## Title | Something" as a table
-      const headerMatch = line.match(/^(#{1,6})\s+(.+)$/);
-      if (headerMatch) {
-        flushList();
-        const level = headerMatch[1].length;
-        const content = headerMatch[2];
-        const headingTag = `h${level}`;
-        elements.push(React.createElement(headingTag, { key: elementIndex++, className: `markdown-h${level}` }, parseInline(content)));
-        continue;
-      }
-
-      const nextLine = lines[i + 1] || '';
-      const candidateLine = normalizeTableCandidateRow(line);
-      const candidateNextLine = normalizeTableCandidateRow(nextLine);
-      const looksLikePipeRow = candidateLine.includes('|') && splitPipeRow(candidateLine).length >= 2;
-      const nextIsPipeRow = candidateNextLine.includes('|') && splitPipeRow(candidateNextLine).length >= 2;
-
-      if (looksLikePipeRow && (isSeparatorRow(candidateNextLine) || nextIsPipeRow)) {
-        flushList();
-        const headerCells = splitPipeRow(candidateLine);
-        const hasSeparator = isSeparatorRow(candidateNextLine);
-        const alignments = (hasSeparator ? splitPipeRow(candidateNextLine) : headerCells).map((cell) => {
-          if (!hasSeparator) return 'left';
-          const trimmedCell = cell.trim();
-          if (trimmedCell.startsWith(':') && trimmedCell.endsWith(':')) return 'center';
-          if (trimmedCell.endsWith(':')) return 'right';
-          return 'left';
-        });
-
-        const bodyRows = [];
-        let j = i + (hasSeparator ? 2 : 1);
-        while (j < lines.length) {
-          const bodyCandidate = normalizeTableCandidateRow(lines[j]);
-          if (!bodyCandidate || !bodyCandidate.includes('|')) break;
-          bodyRows.push(splitPipeRow(bodyCandidate));
-          j += 1;
+      // \[ \] math
+      if (t === '\\[' || t.startsWith('\\[')) {
+        if (!inLatex) {
+          flushList(); inLatex = true; mathLines = [];
+          const rest = t.slice(2).trim();
+          if (rest.endsWith('\\]')) { elements.push(mathBlock(rest.slice(0,-2).trim(), `lb-${ei++}`)); inLatex = false; }
+          else if (rest) mathLines.push(rest);
         }
+        continue;
+      }
+      if (inLatex) {
+        if (t === '\\]' || t.endsWith('\\]')) {
+          const rest = t.endsWith('\\]') ? t.slice(0,-2).trim() : '';
+          if (rest) mathLines.push(rest);
+          elements.push(mathBlock(mathLines.join('\n'), `lb-${ei++}`));
+          inLatex = false; mathLines = [];
+        } else mathLines.push(line);
+        continue;
+      }
 
+      // Headings
+      const hm = line.match(/^(#{1,6})\s+(.+)$/);
+      if (hm) { flushList(); elements.push(React.createElement(`h${hm[1].length}`, { key: ei++, className: `markdown-h${hm[1].length}` }, parseInline(hm[2]))); continue; }
+
+      // Tables
+      const cl = normRow(line), nl = normRow(lines[i+1] || '');
+      if (isPipe(cl) && (isSep(nl) || isPipe(nl))) {
+        flushList();
+        const hcells = splitPipe(cl), hasSep = isSep(nl);
+        const aligns = (hasSep ? splitPipe(nl) : hcells).map(c => { if (!hasSep) return 'left'; const tc = c.trim(); return tc.startsWith(':') && tc.endsWith(':') ? 'center' : tc.endsWith(':') ? 'right' : 'left'; });
+        const rows = []; let j = i + (hasSep ? 2 : 1);
+        while (j < lines.length) { const bc = normRow(lines[j]); if (!bc || !bc.includes('|')) break; rows.push(splitPipe(bc)); j++; }
         elements.push(
-          <div key={`table-wrap-${elementIndex++}`} className="markdown-table-wrap">
+          <div key={`tw-${ei++}`} className="markdown-table-wrap">
             <table className="markdown-table">
-              <thead>
-                <tr>
-                  {headerCells.map((cell, idx) => (
-                    <th key={`th-${idx}`} style={{ textAlign: alignments[idx] || 'left' }}>
-                      {parseInline(cell)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              {bodyRows.length > 0 && (
-                <tbody>
-                  {bodyRows.map((row, rowIdx) => (
-                    <tr key={`tr-${rowIdx}`}>
-                      {headerCells.map((_, colIdx) => (
-                        <td key={`td-${rowIdx}-${colIdx}`} style={{ textAlign: alignments[colIdx] || 'left' }}>
-                          {parseInline(row[colIdx] || '')}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              )}
+              <thead><tr>{hcells.map((c,idx) => <th key={idx} style={{textAlign: aligns[idx]||'left'}}>{parseInline(c)}</th>)}</tr></thead>
+              {rows.length > 0 && <tbody>{rows.map((row,ri) => <tr key={ri}>{hcells.map((_,ci) => <td key={ci} style={{textAlign: aligns[ci]||'left'}}>{parseInline(row[ci]||'')}</td>)}</tr>)}</tbody>}
             </table>
           </div>
         );
+        i = j - 1; continue;
+      }
 
-        i = j - 1;
+      // HR
+      if (/^(-{3,}|\*{3,}|_{3,})$/.test(t)) { flushList(); elements.push(<hr key={`hr-${ei++}`} className="markdown-hr" />); continue; }
+
+      // Blockquote
+      const qm = line.match(/^>\s?(.*)$/);
+      if (qm) { flushList(); elements.push(<blockquote key={`q-${ei++}`} className="markdown-quote">{parseInline(qm[1])}</blockquote>); continue; }
+
+      // Lists
+      const ul = line.match(/^\s*[-*+]\s+(.*)$/), ol = line.match(/^\s*\d+\.\s+(.*)$/);
+      if (ul || ol) {
+        const ct = ol ? 'ordered' : 'unordered', content = (ul?.[1] || ol?.[1] || '').trim();
+        const tm = content.match(/^\[( |x|X)\]\s+(.*)$/);
+        if (listType && listType !== ct) flushList();
+        listType = ct;
+        listItems.push({ checked: tm ? tm[1].toLowerCase() === 'x' : null, content: tm ? tm[2] : content });
         continue;
       }
 
-      if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
-        flushList();
-        elements.push(<hr key={`hr-${elementIndex++}`} className="markdown-hr" />);
-        continue;
-      }
+      // Empty line
+      if (!t) { flushList(); elements.push(<div key={`sp-${ei++}`} className="markdown-spacing" />); continue; }
 
-      const quoteMatch = line.match(/^>\s?(.*)$/);
-      if (quoteMatch) {
-        flushList();
-        elements.push(
-          <blockquote key={`quote-${elementIndex++}`} className="markdown-quote">
-            {parseInline(quoteMatch[1])}
-          </blockquote>
-        );
-        continue;
-      }
-
-      const unordered = line.match(/^\s*[-*+]\s+(.*)$/);
-      const ordered = line.match(/^\s*\d+\.\s+(.*)$/);
-      if (unordered || ordered) {
-        const currentType = ordered ? 'ordered' : 'unordered';
-        const content = (unordered?.[1] || ordered?.[1] || '').trim();
-        const taskMatch = content.match(/^\[( |x|X)\]\s+(.*)$/);
-
-        if (listType && listType !== currentType) {
-          flushList();
-        }
-
-        listType = currentType;
-        listItems.push({
-          checked: taskMatch ? taskMatch[1].toLowerCase() === 'x' : null,
-          content: taskMatch ? taskMatch[2] : content,
-        });
-        continue;
-      }
-
-      if (!trimmed) {
-        flushList();
-        elements.push(<div key={`space-${elementIndex++}`} className="markdown-spacing" />);
-        continue;
-      }
-
-      // Collect consecutive lines into a paragraph (joined with spaces, no <br>)
+      // Paragraph
       flushList();
-      const paragraphLines = [line];
-      let j = i + 1;
+      const pLines = [line]; let j = i + 1;
       while (j < lines.length) {
-        const nextTrimmed = lines[j].trim();
-        if (!nextTrimmed) break; // Stop at empty line
-        
-        // Stop if next line is a special block element
-        if (nextTrimmed.startsWith('#') || 
-            nextTrimmed.startsWith('>') || 
-            nextTrimmed.match(/^\s*[-*+]\s+/) || 
-            nextTrimmed.match(/^\s*\d+\.\s+/) ||
-            nextTrimmed.startsWith('```')) break;
-        
-        paragraphLines.push(lines[j]);
-        j += 1;
+        const nt = lines[j].trim();
+        if (!nt || nt.startsWith('#') || nt.startsWith('>') || nt.match(/^\s*[-*+]\s+/) || nt.match(/^\s*\d+\.\s+/) || nt.startsWith('```') || nt.startsWith('$$') || nt.startsWith('\\[')) break;
+        pLines.push(lines[j]); j++;
       }
-
-      // Join all lines with spaces (normal markdown behavior)
-      const paragraphText = paragraphLines.map(pl => pl.trim()).join(' ');
-
-      elements.push(
-        <p key={`p-${elementIndex++}`} className="markdown-p">
-          {parseInline(paragraphText)}
-        </p>
-      );
-
+      elements.push(<p key={`p-${ei++}`} className="markdown-p">{parseInline(pLines.map(pl => pl.trim()).join(' '))}</p>);
       i = j - 1;
     }
 
-    if (inCodeBlock && codeLines.length > 0) {
-      elements.push(
-        <pre key={`code-open-${elementIndex++}`} className="markdown-code-block">
-          {codeLang ? <div className="markdown-code-lang">{codeLang}</div> : null}
-          <code>{codeLines.join('\n')}</code>
-        </pre>
-      );
-    }
-
+    if (inCode && codeLines.length) elements.push(<CodeBlock key={`co-${ei++}`} lang={codeLang} code={codeLines.join('\n')} />);
+    if ((inMath || inLatex) && mathLines.length) elements.push(mathBlock(mathLines.join('\n'), `mu-${ei++}`));
     flushList();
     return elements;
   };
@@ -468,42 +329,37 @@ function Homescreen() {
     if (abortRef.current) {
       abortRef.current.abort();
       abortRef.current = null;
-      setStreaming(false);
+      setPhase('idle');
     }
   };
 
   const requestAssistantResponse = async (updatedMessages) => {
-    setStreaming(true);
+    const userMessage = updatedMessages[updatedMessages.length - 1]?.content;
+    if (!userMessage) return;
+
     setMessages([...updatedMessages, { role: 'assistant', content: '' }]);
+    setPhase('gathering');
 
     const controller = new AbortController();
     abortRef.current = controller;
 
     try {
-      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const res = await fetch(`${BACKEND_URL}/api/chat`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${API_KEY}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': window.location.origin,
-          'X-Title': 'uXnAI',
-        },
-        body: JSON.stringify({
-          model: MODEL,
-          stream: true,
-          messages: updatedMessages,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userMessage }),
         signal: controller.signal,
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err?.error?.message || 'API error');
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err?.error || 'Server error');
       }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let firstToken = true;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -519,9 +375,11 @@ function Homescreen() {
           if (data === '[DONE]') break;
 
           try {
-            const json = JSON.parse(data);
-            const token = json.choices?.[0]?.delta?.content || '';
+            const parsed = JSON.parse(data);
+            if (parsed.error) throw new Error(parsed.error);
+            const token = parsed.choices?.[0]?.delta?.content || '';
             if (token) {
+              if (firstToken) { setPhase('streaming'); firstToken = false; }
               setMessages(prev => {
                 const updated = [...prev];
                 updated[updated.length - 1] = {
@@ -531,8 +389,8 @@ function Homescreen() {
                 return updated;
               });
             }
-          } catch {
-            // skip malformed chunk
+          } catch (parseErr) {
+            if (parseErr.message && !parseErr.message.includes('JSON')) throw parseErr;
           }
         }
       }
@@ -540,32 +398,27 @@ function Homescreen() {
       if (err.name !== 'AbortError') {
         setMessages(prev => {
           const updated = [...prev];
-          updated[updated.length - 1] = {
-            role: 'assistant',
-            content: `⚠️ Error: ${err.message}`,
-          };
+          updated[updated.length - 1] = { role: 'assistant', content: `⚠️ Error: ${err.message}` };
           return updated;
         });
       }
     } finally {
-      setStreaming(false);
+      setPhase('idle');
       abortRef.current = null;
     }
   };
 
   const persistSession = (sessionId, nextMessages, titleHint) => {
     const sessions = readJson(TEXT_SESSIONS_KEY, []);
-    const id = sessionId || '';
+    const id = String(sessionId || '');
     if (!id) return;
     const existing = Array.isArray(sessions) ? sessions : [];
-    const idx = existing.findIndex((s) => String(s.id) === String(id));
-    const updatedAt = Date.now();
-    const nextTitle = titleHint || (idx >= 0 ? existing[idx]?.title : '') || 'New chat';
-    const payload = { id, title: nextTitle, updatedAt, messages: nextMessages };
-    const nextSessions = idx >= 0
+    const idx = existing.findIndex(s => String(s.id) === id);
+    const payload = { id, title: titleHint || existing[idx]?.title || 'New chat', updatedAt: Date.now(), messages: nextMessages };
+    const next = idx >= 0
       ? [...existing.slice(0, idx), { ...existing[idx], ...payload }, ...existing.slice(idx + 1)]
       : [payload, ...existing];
-    writeJson(TEXT_SESSIONS_KEY, nextSessions);
+    writeJson(TEXT_SESSIONS_KEY, next);
     window.dispatchEvent(new Event('oneai:textSessionsUpdated'));
   };
 
@@ -573,18 +426,14 @@ function Homescreen() {
     const onNewChat = () => {
       setActiveSessionId('');
       localStorage.setItem(ACTIVE_TEXT_SESSION_KEY, '');
-      setMessages([]);
-      setQuery('');
-      setHasStarted(false);
-      setMessageFeedback({});
+      setMessages([]); setQuery(''); setHasStarted(false); setMessageFeedback({});
       window.setTimeout(() => inputRef.current?.focus(), 0);
     };
-
     const onOpen = (e) => {
       const id = e?.detail?.id;
       if (!id) return;
       const sessions = readJson(TEXT_SESSIONS_KEY, []);
-      const found = (Array.isArray(sessions) ? sessions : []).find((s) => String(s.id) === String(id));
+      const found = (Array.isArray(sessions) ? sessions : []).find(s => String(s.id) === String(id));
       if (!found) return;
       setActiveSessionId(String(id));
       localStorage.setItem(ACTIVE_TEXT_SESSION_KEY, String(id));
@@ -593,64 +442,32 @@ function Homescreen() {
       setMessageFeedback({});
       window.setTimeout(() => inputRef.current?.focus(), 0);
     };
-
     window.addEventListener('oneai:newChat', onNewChat);
     window.addEventListener('oneai:openTextSession', onOpen);
-    return () => {
-      window.removeEventListener('oneai:newChat', onNewChat);
-      window.removeEventListener('oneai:openTextSession', onOpen);
-    };
+    return () => { window.removeEventListener('oneai:newChat', onNewChat); window.removeEventListener('oneai:openTextSession', onOpen); };
   }, []);
 
   useEffect(() => {
     inputRef.current?.focus();
-
-    const onGlobalKeyDown = (e) => {
+    const onKey = (e) => {
       const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
-      const metaOrCtrl = isMac ? e.metaKey : e.ctrlKey;
-      
-      // Ctrl/Cmd+K: Focus input
-      if (metaOrCtrl && (e.key === 'k' || e.key === 'K')) {
+      const mod = isMac ? e.metaKey : e.ctrlKey;
+      if (mod && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); inputRef.current?.focus(); }
+      if (mod && (e.key === 'c' || e.key === 'C') && !inputRef.current?.contains(document.activeElement)) {
         e.preventDefault();
-        inputRef.current?.focus();
-        return;
+        const last = [...messages].reverse().find(m => m.role === 'assistant');
+        if (last?.content) handleCopy(messages.lastIndexOf(last), last.content);
       }
-      
-      // Ctrl/Cmd+C: Copy last assistant message
-      if (metaOrCtrl && (e.key === 'c' || e.key === 'C') && !inputRef.current?.contains(document.activeElement)) {
-        e.preventDefault();
-        const lastAssistant = [...messages].reverse().find((m) => m.role === 'assistant');
-        if (lastAssistant?.content) {
-          handleCopy(messages.indexOf(lastAssistant), lastAssistant.content);
-        }
-        return;
-      }
-      
-      // Alt+N: New chat
-      if ((isMac ? e.altKey : e.altKey) && (e.key === 'n' || e.key === 'N')) {
-        e.preventDefault();
-        window.dispatchEvent(new Event('oneai:newChat'));
-        return;
-      }
-      
-      // Escape: Stop streaming
-      if (e.key === 'Escape' && streaming) {
-        e.preventDefault();
-        handleStop();
-        return;
-      }
+      if (e.altKey && (e.key === 'n' || e.key === 'N')) { e.preventDefault(); window.dispatchEvent(new Event('oneai:newChat')); }
+      if (e.key === 'Escape' && isStreaming) { e.preventDefault(); handleStop(); }
     };
-
-    window.addEventListener('keydown', onGlobalKeyDown);
-    return () => window.removeEventListener('keydown', onGlobalKeyDown);
-  }, [messages, streaming]);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [messages, isStreaming]);
 
   const sendMessage = async (rawText) => {
     const userMessage = (rawText || '').trim();
-    // #region agent log
-    fetch('http://127.0.0.1:7585/ingest/45195724-e99d-4d0f-9128-ee9e91ae2d13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c9358d'},body:JSON.stringify({sessionId:'c9358d',runId:debugRunIdRef.current,hypothesisId:'H3',location:'Homescreen.jsx:sendMessage-entry',message:'sendMessage invoked',data:{rawLength:(rawText||'').length,trimmedLength:userMessage.length,streaming,activeSessionId:activeSessionId || null,messageCount:messages.length},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    if (!userMessage || streaming) return;
+    if (!userMessage || isStreaming) return;
 
     setHasStarted(true);
     setQuery('');
@@ -663,101 +480,54 @@ function Homescreen() {
     }
 
     const updatedMessages = [...messages, { role: 'user', content: userMessage }];
-    if (updatedMessages.filter((m) => m.role === 'user').length === 1) {
-      const title = slugTitleFromText(userMessage);
-      persistSession(sessionId, updatedMessages, title);
-    } else {
-      persistSession(sessionId, updatedMessages);
-    }
+    const isFirst = updatedMessages.filter(m => m.role === 'user').length === 1;
+    persistSession(sessionId, updatedMessages, isFirst ? slugTitleFromText(userMessage) : undefined);
 
     await requestAssistantResponse(updatedMessages);
   };
 
-  const handleSendClick = async () => {
-    // #region agent log
-    fetch('http://127.0.0.1:7585/ingest/45195724-e99d-4d0f-9128-ee9e91ae2d13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c9358d'},body:JSON.stringify({sessionId:'c9358d',runId:debugRunIdRef.current,hypothesisId:'H3',location:'Homescreen.jsx:handleSendClick',message:'send button clicked',data:{queryLength:query.length,trimmedLength:query.trim().length,streaming},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    await sendMessage(query);
-  };
+  const handleSendClick = () => sendMessage(query);
 
-  const handleFeedback = (messageIndex, type) => {
-    setMessageFeedback((prev) => {
-      const current = prev[messageIndex];
-      return {
-        ...prev,
-        [messageIndex]: current === type ? null : type,
-      };
-    });
-  };
+  const handleFeedback = (idx, type) =>
+    setMessageFeedback(prev => ({ ...prev, [idx]: prev[idx] === type ? null : type }));
 
-  const handleCopy = async (messageIndex, text) => {
+  const handleCopy = async (idx, text) => {
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
-      setCopiedMessageId(messageIndex);
-      window.setTimeout(() => {
-        setCopiedMessageId((prev) => (prev === messageIndex ? null : prev));
-      }, 1400);
-    } catch {
-      // Clipboard may fail in unsupported contexts.
-    }
+      setCopiedMessageId(idx);
+      window.setTimeout(() => setCopiedMessageId(prev => prev === idx ? null : prev), 1400);
+    } catch {}
   };
 
   const handleRegenerate = async (assistantIndex) => {
-    if (streaming) return;
-
-    let userIndex = assistantIndex - 1;
-    while (userIndex >= 0 && messages[userIndex]?.role !== 'user') {
-      userIndex -= 1;
-    }
-    if (userIndex < 0) return;
-
-    const contextMessages = messages.slice(0, userIndex + 1);
-    setMessages(contextMessages);
+    if (isStreaming) return;
+    let ui = assistantIndex - 1;
+    while (ui >= 0 && messages[ui]?.role !== 'user') ui--;
+    if (ui < 0) return;
+    const ctx = messages.slice(0, ui + 1);
+    setMessages(ctx);
     setHasStarted(true);
-    await requestAssistantResponse(contextMessages);
+    await requestAssistantResponse(ctx);
   };
 
   const handleInputKeyDown = (e) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7585/ingest/45195724-e99d-4d0f-9128-ee9e91ae2d13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c9358d'},body:JSON.stringify({sessionId:'c9358d',runId:debugRunIdRef.current,hypothesisId:'H1',location:'Homescreen.jsx:handleInputKeyDown-entry',message:'textarea keydown captured',data:{key:e.key,shiftKey:e.shiftKey,ctrlKey:e.ctrlKey,metaKey:e.metaKey,isComposing:e.isComposing,streaming,queryLength:query.length,activeElementTag:document.activeElement?.tagName || null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     if (e.isComposing) return;
-    if (e.key === 'Escape' && streaming) {
-      e.preventDefault();
-      handleStop();
-      return;
-    }
-
+    if (e.key === 'Escape' && isStreaming) { e.preventDefault(); handleStop(); return; }
     if (e.key !== 'Enter' && e.key !== 'NumpadEnter') return;
-
-    const shouldSend = !e.shiftKey || e.ctrlKey || e.metaKey;
-    // #region agent log
-    fetch('http://127.0.0.1:7585/ingest/45195724-e99d-4d0f-9128-ee9e91ae2d13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c9358d'},body:JSON.stringify({sessionId:'c9358d',runId:debugRunIdRef.current,hypothesisId:'H2',location:'Homescreen.jsx:handleInputKeyDown-enter',message:'enter decision evaluated',data:{shouldSend,shiftKey:e.shiftKey,ctrlKey:e.ctrlKey,metaKey:e.metaKey,streaming,trimmedLength:query.trim().length},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    if (!shouldSend) return;
-
+    if (e.shiftKey && !e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
     sendMessage(e.currentTarget.value);
   };
-
-  useEffect(() => {
-    const list = messagesListRef.current;
-    // #region agent log
-    fetch('http://127.0.0.1:7585/ingest/45195724-e99d-4d0f-9128-ee9e91ae2d13',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'c9358d'},body:JSON.stringify({sessionId:'c9358d',runId:debugRunIdRef.current,hypothesisId:'H4',location:'Homescreen.jsx:layoutProbe',message:'layout metrics sampled',data:{hasStarted,messages:messages.length,listExists:Boolean(list),listScrollHeight:list?.scrollHeight ?? null,listClientHeight:list?.clientHeight ?? null,listOverflowY:list ? window.getComputedStyle(list).overflowY : null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-  }, [hasStarted, messages.length]);
 
   return (
     <div className="home-screen">
       {showWip && <WipToast onClose={() => setShowWip(false)} />}
 
-      {/* Header — fades out once chat starts */}
       <div className={`home-header ${hasStarted ? 'home-header--hidden' : ''}`}>
         <p className="tagline_home">How can I help you today?</p>
         <button className="wip-btn" onClick={() => setShowWip(true)}>
-          <Construction size={13} />
-          Work in Progress
+          <Construction size={13} /> Work in Progress
         </button>
       </div>
 
@@ -765,11 +535,7 @@ function Homescreen() {
         {!hasStarted ? (
           <div className="suggestions-grid">
             {suggestions.map((item, index) => (
-              <div
-                key={index}
-                className="suggestion-card"
-                onClick={() => setQuery(item.text)}
-              >
+              <div key={index} className="suggestion-card" onClick={() => setQuery(item.text)}>
                 <div className="suggestion-icon">{item.icon}</div>
                 <p className="suggestion-text">{item.text}</p>
               </div>
@@ -779,68 +545,32 @@ function Homescreen() {
           <div className="messages-list" ref={messagesListRef} onScroll={handleScroll}>
             {messages.map((msg, i) => (
               <div key={i} className={`message message--${msg.role}`}>
-                <span className="message-role">
-                  {msg.role === 'user' ? 'You' : 'uXnAI'}
-                </span>
+                <span className="message-role">{msg.role === 'user' ? 'You' : 'uXnAI'}</span>
                 <div className="message-content">
-                  {parseMarkdown(msg.content)}
-                  {streaming && i === messages.length - 1 && msg.role === 'assistant' && (
+                  {msg.role === 'assistant' && i === messages.length - 1 && phase === 'gathering' && !msg.content
+                    ? <InsightLoader />
+                    : parseMarkdown(msg.content)
+                  }
+                  {phase === 'streaming' && i === messages.length - 1 && msg.role === 'assistant' && (
                     <span className="cursor-blink" />
                   )}
                 </div>
-                {msg.role === 'assistant' && msg.content && (
+                {msg.role === 'assistant' && msg.content && phase === 'idle' && (
                   <div className="message-actions">
-                    <button
-                      type="button"
-                      className={`message-action-btn ${messageFeedback[i] === 'like' ? 'active' : ''}`}
-                      onClick={() => handleFeedback(i, 'like')}
-                      title="Like response"
-                      aria-label="Like response"
-                    >
-                      <ThumbsUp size={14} />
+                    <button type="button" className={`message-action-btn ${messageFeedback[i] === 'like' ? 'active' : ''}`} onClick={() => handleFeedback(i, 'like')} title="Like"><ThumbsUp size={14} /></button>
+                    <button type="button" className={`message-action-btn ${messageFeedback[i] === 'dislike' ? 'active' : ''}`} onClick={() => handleFeedback(i, 'dislike')} title="Dislike"><ThumbsDown size={14} /></button>
+                    <button type="button" className="message-action-btn" onClick={() => handleCopy(i, msg.content)} title="Copy">
+                      <Copy size={14} /><span className="action-label">{copiedMessageId === i ? 'Copied' : 'Copy'}</span>
                     </button>
-                    <button
-                      type="button"
-                      className={`message-action-btn ${messageFeedback[i] === 'dislike' ? 'active' : ''}`}
-                      onClick={() => handleFeedback(i, 'dislike')}
-                      title="Dislike response"
-                      aria-label="Dislike response"
-                    >
-                      <ThumbsDown size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      className="message-action-btn"
-                      onClick={() => handleCopy(i, msg.content)}
-                      title="Copy response"
-                      aria-label="Copy response"
-                    >
-                      <Copy size={14} />
-                      <span className="action-label">{copiedMessageId === i ? 'Copied' : 'Copy'}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="message-action-btn"
-                      onClick={() => handleRegenerate(i)}
-                      disabled={streaming}
-                      title="Regenerate response"
-                      aria-label="Regenerate response"
-                    >
-                      <RefreshCw size={14} />
-                      <span className="action-label">Regenerate</span>
+                    <button type="button" className="message-action-btn" onClick={() => handleRegenerate(i)} title="Regenerate">
+                      <RefreshCw size={14} /><span className="action-label">Regenerate</span>
                     </button>
                   </div>
                 )}
               </div>
             ))}
             {showScrollButton && (
-              <button
-                type="button"
-                className="scroll-to-bottom-btn"
-                onClick={scrollToBottom}
-                title="Scroll to latest"
-                aria-label="Scroll to latest"
-              >
+              <button type="button" className="scroll-to-bottom-btn" onClick={scrollToBottom} title="Scroll to latest">
                 <ChevronDown size={20} />
               </button>
             )}
@@ -848,34 +578,21 @@ function Homescreen() {
         )}
       </div>
 
-      {/* Input area */}
       <div className="input-wrapper">
         <div>
           <div className="model-dropdown-wrapper">
-            <button 
-              className="model-tag" 
-              onClick={() => setShowModelDropdown(!showModelDropdown)}
-              type="button"
-            >
-              <span className="model-dot" />
-              {MODEL_DISPLAY}
-              <span className="dropdown-arrow">▼</span>
+            <button className="model-tag" onClick={() => setShowModelDropdown(!showModelDropdown)} type="button">
+              <span className="model-dot" />{MODEL_DISPLAY}<span className="dropdown-arrow">▼</span>
             </button>
             {showModelDropdown && (
               <div className="model-dropdown-menu">
-                <div className="model-option selected">
-                  <span className="model-dot" />
-                  {MODEL_DISPLAY}
-                </div>
+                <div className="model-option selected"><span className="model-dot" />{MODEL_DISPLAY}</div>
               </div>
             )}
           </div>
 
           <div className="input-container" role="group" aria-label="Chat input">
-            <button type="button" className="plus-btn" title="Attach">
-              <Plus size={18} />
-            </button>
-
+            <button type="button" className="plus-btn" title="Attach"><Plus size={18} /></button>
             <textarea
               ref={inputRef}
               className="input-bar"
@@ -883,18 +600,13 @@ function Homescreen() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleInputKeyDown}
-              disabled={streaming}
+              disabled={isStreaming}
               rows={1}
             />
-
-            {streaming ? (
-              <button type="button" className="send-btn stop-btn" onClick={handleStop}>
-                <Square size={16} fill="currentColor" />
-              </button>
+            {isStreaming ? (
+              <button type="button" className="send-btn stop-btn" onClick={handleStop}><Square size={16} fill="currentColor" /></button>
             ) : (
-              <button type="button" className="send-btn" onClick={handleSendClick} disabled={!query.trim()}>
-                <SendHorizontal size={20} />
-              </button>
+              <button type="button" className="send-btn" onClick={handleSendClick} disabled={!query.trim()}><SendHorizontal size={20} /></button>
             )}
           </div>
         </div>
