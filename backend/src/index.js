@@ -7,7 +7,7 @@ import { createSynthesisStream, isConfigured, INSIGHT_MODELS, MAIN_MODEL } from 
 const app = new Hono()
 
 app.use('*', cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: process.env.CORS_ORIGIN || 'https://unxai.vercel.app',
   allowMethods: ['GET', 'POST', 'OPTIONS'],
   allowHeaders: ['Content-Type']
 }))
@@ -36,7 +36,7 @@ app.post('/api/chat', async (c) => {
     return c.json({ error: 'Message cannot be empty' }, 400)
   }
 
-  const referer = process.env.HTTP_REFERER || c.req.header('origin') || 'http://localhost:5173'
+  const referer = process.env.HTTP_REFERER || c.req.header('origin') || 'https://unxai.vercel.app'
   const stream = createSynthesisStream(message.trim(), process.env.OPENROUTER_API_KEY, referer)
 
   return new Response(stream, {
