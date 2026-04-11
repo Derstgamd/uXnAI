@@ -11,6 +11,11 @@
       rel="stylesheet"
     />
     <title>uXnAI</title>
+    <script>
+      // Wake up Render backend on page load
+      fetch('https://uxnai.onrender.com/health')
+        .catch(() => {}) // silently ignore errors
+    </script>
   </head>
   <body>
     <div id="root"></div>
