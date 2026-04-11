@@ -4,7 +4,7 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import './Homescreen.css';
 
-const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const BACKEND_URL = import.meta.env.VITE_API_URL || 'https://unxaibd.vercel.app';
 const TEXT_SESSIONS_KEY = 'oneai:textSessions';
 const ACTIVE_TEXT_SESSION_KEY = 'oneai:activeTextSessionId';
 const MODEL_DISPLAY = 'uXnAI · 3-Model Pipeline';
