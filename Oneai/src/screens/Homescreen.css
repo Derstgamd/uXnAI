@@ -969,3 +969,164 @@
 .messages-list::-webkit-scrollbar-thumb:hover {
   background: #e8ff4766;
 }
+/* ── Think / Reasoning block ── */
+.think-block {
+  margin-bottom: 12px;
+  border: 1px solid #1e1e1e;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.think-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  background: #0f0f0f;
+  border: none;
+  color: #555;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+  letter-spacing: 0.03em;
+}
+
+.think-toggle:hover {
+  background: #161616;
+  color: #888;
+}
+
+.think-toggle svg:first-child {
+  color: #f59e0b;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.think-toggle span {
+  flex: 1;
+}
+
+.think-content {
+  padding: 12px 14px;
+  background: #080808;
+  border-top: 1px solid #1a1a1a;
+  font-size: 13px;
+  color: #444;
+  line-height: 1.7;
+}
+
+.think-content .markdown-p {
+  color: #444;
+}
+
+.think-content .markdown-h1,
+.think-content .markdown-h2,
+.think-content .markdown-h3 {
+  color: #555;
+  font-size: 1rem;
+}
+
+/* ── Code block header + copy button ── */
+.markdown-code-block {
+  padding: 0 !important;
+}
+
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px;
+  background: #111;
+  border-bottom: 1px solid #1e1e1e;
+  border-radius: 8px 8px 0 0;
+}
+
+.markdown-code-block code {
+  display: block;
+  padding: 14px 16px;
+  overflow-x: auto;
+}
+
+.code-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: 1px solid #2a2a2a;
+  border-radius: 5px;
+  color: #555;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  letter-spacing: 0.02em;
+}
+
+.code-copy-btn:hover {
+  background: #1a1a1a;
+  border-color: #3a3a3a;
+  color: #aaa;
+}
+
+.code-copy-btn--copied {
+  background: rgba(232, 255, 71, 0.07);
+  border-color: rgba(232, 255, 71, 0.25);
+  color: #e8ff47;
+}
+
+.code-copy-btn--copied:hover {
+  background: rgba(232, 255, 71, 0.1);
+  color: #e8ff47;
+}
+.insight-loader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #f59e0b;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 0;
+}
+
+.insight-loader-icon {
+  animation: spin 1.4s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Beautified scrollbar ── */
+.messages-list {
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a2a transparent;
+}
+
+.messages-list::-webkit-scrollbar {
+  display: block !important;
+  width: 4px;
+}
+
+.messages-list::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 8px 0;
+}
+
+.messages-list::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 99px;
+}
+
+.messages-list:hover::-webkit-scrollbar-thumb {
+  background: #3a3a3a;
+}
+
+.messages-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(232, 255, 71, 0.4);
+}

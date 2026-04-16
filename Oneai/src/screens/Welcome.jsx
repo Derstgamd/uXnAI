@@ -17,9 +17,8 @@ const EmailIcon = () => (
   </svg>
 );
 
-export default function Welcome({ onTryFree }) {
+export default function Welcome({ onTryFree, onGoogleLogin, onEmailLogin, authError }) {
   const [mounted, setMounted] = useState(false);
-  const [emailClicks, setEmailClicks] = useState(0);
   const [displayedText, setDisplayedText] = useState('');
   const texts = [
     'Welcome to the consensus',
@@ -35,36 +34,26 @@ export default function Welcome({ onTryFree }) {
 
   useEffect(() => {
     if (!mounted) return;
-    
+
     const interval = setInterval(() => {
       const state = animationState.current;
       const currentText = texts[state.textIndex];
-      
-      if (state.isHolding) {
-        // Skip - waiting 
-        return;
-      }
-      
+
+      if (state.isHolding) return;
+
       if (!state.isErasing) {
-        // Typing phase
         if (state.charIndex < currentText.length) {
           setDisplayedText(currentText.slice(0, state.charIndex + 1));
           state.charIndex++;
-        } else if (!state.isHolding) {
-          // Finished typing - start holding
+        } else {
           state.isHolding = true;
-          setTimeout(() => {
-            state.isHolding = false;
-            state.isErasing = true;
-          }, 2000);
+          setTimeout(() => { state.isHolding = false; state.isErasing = true; }, 2000);
         }
       } else {
-        // Erasing phase
         if (state.charIndex > 0) {
           state.charIndex--;
           setDisplayedText(currentText.slice(0, state.charIndex));
         } else {
-          // Finished erasing - hold before next text
           state.isHolding = true;
           setTimeout(() => {
             state.isHolding = false;
@@ -76,21 +65,9 @@ export default function Welcome({ onTryFree }) {
     }, 100);
 
     return () => clearInterval(interval);
-  }, [mounted, texts]);
+  }, [mounted]);
 
   if (!mounted) return null;
-
-  const handleEmailClick = () => {
-    const next = emailClicks + 1;
-    setEmailClicks(next);
-    if (next >= 2) {
-      onTryFree();
-    }
-  };
-
-  const handleGoogleClick = () => {
-    onTryFree();
-  };
 
   return (
     <div className="welcome-root">
@@ -101,7 +78,13 @@ export default function Welcome({ onTryFree }) {
       <div className="welcome-container">
         <div className="welcome-content">
           <h1 className="welcome-title">Welcome to OneAI</h1>
-          <p className="welcome-subtitle typewriter">{displayedText}<span className="rotating-square"></span></p>
+          <p className="welcome-subtitle typewriter">
+            {displayedText}<span className="rotating-square"></span>
+          </p>
+
+          {authError && (
+            <div className="welcome-error">{authError}</div>
+          )}
 
           <button className="btn btn-try-free" onClick={onTryFree}>
             Try it for free
@@ -113,24 +96,15 @@ export default function Welcome({ onTryFree }) {
             <div className="sep-line" />
           </div>
 
-          <button className="btn btn-google" onClick={handleGoogleClick}>
+          <button className="btn btn-google" onClick={onGoogleLogin}>
             <span className="btn-icon"><GoogleIcon /></span>
             <span className="btn-label">Continue with Google</span>
           </button>
 
-          <button
-            className={`btn btn-email ${emailClicks === 1 ? 'btn-email--primed' : ''}`}
-            onClick={handleEmailClick}
-          >
+          <button className="btn btn-email" onClick={onEmailLogin}>
             <span className="btn-icon"><EmailIcon /></span>
-            <span className="btn-label">
-              {emailClicks === 1 ? 'Click again to confirm →' : 'Continue with Email'}
-            </span>
+            <span className="btn-label">Continue with Email</span>
           </button>
-
-          {emailClicks === 1 && (
-            <p className="email-hint">One more click to continue</p>
-          )}
         </div>
 
         <footer className="welcome-footer">

@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import "./Sidebar.css";
+import { useState, useEffect } from 'react'
+import './Sidebar.css'
 
 const GoogleIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -8,30 +8,44 @@ const GoogleIcon = () => (
     <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
     <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
   </svg>
-);
+)
 
 const EmailIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="2" y="4" width="20" height="16" rx="2"/>
     <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
   </svg>
-);
+)
 
-export default function Sidebar({ onGoogleLogin, onEmailLogin }) {
-  const [mounted, setMounted] = useState(false);
-  const [emailClicks, setEmailClicks] = useState(0);
+export default function Sidebar({ onGoogleLogin, onEmailLogin, onEmailRegister, authError }) {
+  const [mounted, setMounted] = useState(false)
+  const [showForm, setShowForm] = useState(false)   // false = buttons, true = email form
+  const [isRegister, setIsRegister] = useState(false)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [localError, setLocalError] = useState('')
 
-  useEffect(() => setMounted(true), []);
+  useEffect(() => setMounted(true), [])
+  if (!mounted) return null
 
-  if (!mounted) return null;
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setLocalError('')
 
-  const handleEmailClick = () => {
-    const next = emailClicks + 1;
-    setEmailClicks(next);
-    if (next >= 2) {
-      onEmailLogin();
-    }
-  };
+    if (!email || !password) { setLocalError('Please fill in all fields'); return }
+    if (password.length < 8) { setLocalError('Password must be at least 8 characters'); return }
+
+    setSubmitting(true)
+    const ok = isRegister
+      ? await onEmailRegister(email, password)
+      : await onEmailLogin(email, password)
+    setSubmitting(false)
+
+    if (!ok) setLocalError(authError || 'Something went wrong')
+  }
+
+  const displayError = localError || authError
 
   return (
     <div className="auth-root">
@@ -49,36 +63,84 @@ export default function Sidebar({ onGoogleLogin, onEmailLogin }) {
           <p className="tagline">Your AI. One place. No noise.</p>
         </div>
 
-        <button className="btn btn-google" onClick={onGoogleLogin}>
-          <span className="btn-icon"><GoogleIcon /></span>
-          <span className="btn-label">Continue with Google</span>
-        </button>
+        {displayError && (
+          <div className="auth-error">{displayError}</div>
+        )}
 
-        <div className="separator">
-          <div className="sep-line" />
-          <span className="sep-text">or</span>
-          <div className="sep-line" />
-        </div>
+        {!showForm ? (
+          <>
+            <button className="btn btn-google" onClick={onGoogleLogin}>
+              <span className="btn-icon"><GoogleIcon /></span>
+              <span className="btn-label">Continue with Google</span>
+            </button>
 
-        <button
-          className={`btn btn-email ${emailClicks === 1 ? 'btn-email--primed' : ''}`}
-          onClick={handleEmailClick}
-        >
-          <span className="btn-icon"><EmailIcon /></span>
-          <span className="btn-label">
-            {emailClicks === 1 ? 'Click again to confirm →' : 'Continue with Email'}
-          </span>
-        </button>
+            <div className="separator">
+              <div className="sep-line" />
+              <span className="sep-text">or</span>
+              <div className="sep-line" />
+            </div>
 
-        {emailClicks === 1 && (
-          <p className="email-hint">One more click to continue</p>
+            <button className="btn btn-email" onClick={() => setShowForm(true)}>
+              <span className="btn-icon"><EmailIcon /></span>
+              <span className="btn-label">Continue with Email</span>
+            </button>
+          </>
+        ) : (
+          <form className="auth-form" onSubmit={handleSubmit}>
+            <div className="form-toggle">
+              <button
+                type="button"
+                className={`toggle-btn ${!isRegister ? 'active' : ''}`}
+                onClick={() => { setIsRegister(false); setLocalError('') }}
+              >
+                Sign in
+              </button>
+              <button
+                type="button"
+                className={`toggle-btn ${isRegister ? 'active' : ''}`}
+                onClick={() => { setIsRegister(true); setLocalError('') }}
+              >
+                Create account
+              </button>
+            </div>
+
+            <input
+              className="form-input"
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              autoFocus
+              required
+            />
+            <input
+              className="form-input"
+              type="password"
+              placeholder="Password (min 8 characters)"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+            />
+
+            <button className="btn btn-submit" type="submit" disabled={submitting}>
+              {submitting ? 'Please wait…' : isRegister ? 'Create account' : 'Sign in'}
+            </button>
+
+            <button
+              type="button"
+              className="back-btn"
+              onClick={() => { setShowForm(false); setLocalError(''); setEmail(''); setPassword('') }}
+            >
+              ← Back
+            </button>
+          </form>
         )}
 
         <p className="footer-text">
-          By continuing, you agree to our{" "}
-          <a>Terms of Service</a> and <a>Privacy Policy</a>.
+          By continuing, you agree to our{' '}
+          <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>.
         </p>
       </div>
     </div>
-  );
+  )
 }

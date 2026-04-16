@@ -4,7 +4,7 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import './Homescreen.css';
 
-const BACKEND_URL = import.meta.env.VITE_API_URL || 'https://uxnai.onrender.com';
+const BACKEND_URL ='http://localhost:3001';
 const TEXT_SESSIONS_KEY = 'oneai:textSessions';
 const ACTIVE_TEXT_SESSION_KEY = 'oneai:activeTextSessionId';
 const MODEL_DISPLAY = 'uXnAI · 3-Model Pipeline';
@@ -65,6 +65,29 @@ function InsightLoader() {
     <div className="insight-loader">
       <Cpu size={13} className="insight-loader-icon" />
       <span>Consulting specialist models…</span>
+    </div>
+  );
+}
+
+// ── Collapsible reasoning block ───────────────────────────────────────────────
+function ThinkingBlock({ content, parseMarkdown }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="think-block">
+      <button className="think-toggle" onClick={() => setOpen(o => !o)} type="button">
+        <Cpu size={12} />
+        <span>Reasoning</span>
+        <ChevronDown
+          size={12}
+          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }}
+        />
+      </button>
+      {open && (
+        <div className="think-content">
+          {parseMarkdown(content)}
+        </div>
+      )}
     </div>
   );
 }
@@ -207,7 +230,7 @@ function Homescreen() {
       const line = lines[i];
       const t = line.trim();
 
-      // Code blocks — renders as <CodeBlock> with copy button
+      // Code blocks
       if (t.startsWith('```')) {
         if (!inCode) {
           flushList(); inCode = true; codeLang = t.slice(3).trim(); codeLines = [];
@@ -333,11 +356,12 @@ function Homescreen() {
     }
   };
 
+  // ── Core: send message → SSE stream ─────────────────────────────────────────
   const requestAssistantResponse = async (updatedMessages) => {
     const userMessage = updatedMessages[updatedMessages.length - 1]?.content;
     if (!userMessage) return;
 
-    setMessages([...updatedMessages, { role: 'assistant', content: '' }]);
+    setMessages([...updatedMessages, { role: 'assistant', content: '', reasoning: '' }]);
     setPhase('gathering');
 
     const controller = new AbortController();
@@ -349,11 +373,13 @@ function Homescreen() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userMessage }),
         signal: controller.signal,
+        credentials: 'include',
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(err?.error || 'Server error');
+        let errMsg = `Server error ${res.status}`;
+        try { const e = await res.json(); errMsg = e?.error || e?.message || errMsg; } catch {}
+        throw new Error(errMsg);
       }
 
       const reader = res.body.getReader();
@@ -374,31 +400,49 @@ function Homescreen() {
           const data = line.slice(6).trim();
           if (data === '[DONE]') break;
 
-          try {
-            const parsed = JSON.parse(data);
-            if (parsed.error) throw new Error(parsed.error);
-            const token = parsed.choices?.[0]?.delta?.content || '';
-            if (token) {
-              if (firstToken) { setPhase('streaming'); firstToken = false; }
-              setMessages(prev => {
-                const updated = [...prev];
-                updated[updated.length - 1] = {
-                  role: 'assistant',
-                  content: updated[updated.length - 1].content + token,
-                };
-                return updated;
-              });
-            }
-          } catch (parseErr) {
-            if (parseErr.message && !parseErr.message.includes('JSON')) throw parseErr;
+          let parsed;
+          try { parsed = JSON.parse(data); } catch { continue; }
+
+          if (parsed.error) throw new Error(
+            typeof parsed.error === 'object' ? JSON.stringify(parsed.error) : String(parsed.error)
+          );
+
+          // Reasoning token (from delta.reasoning field)
+          const reasoningToken = parsed.choices?.[0]?.delta?.reasoning || '';
+          if (reasoningToken) {
+            setMessages(prev => {
+              const updated = [...prev];
+              updated[updated.length - 1] = {
+                ...updated[updated.length - 1],
+                reasoning: (updated[updated.length - 1].reasoning || '') + reasoningToken,
+              };
+              return updated;
+            });
+          }
+
+          // Content token
+          const token = parsed.choices?.[0]?.delta?.content || '';
+          if (token) {
+            if (firstToken) { setPhase('streaming'); firstToken = false; }
+            setMessages(prev => {
+              const updated = [...prev];
+              updated[updated.length - 1] = {
+                ...updated[updated.length - 1],
+                content: updated[updated.length - 1].content + token,
+              };
+              return updated;
+            });
           }
         }
       }
     } catch (err) {
       if (err.name !== 'AbortError') {
+        const msg = err?.message && err.message !== '[object Object]'
+          ? err.message
+          : typeof err === 'object' ? JSON.stringify(err) : String(err);
         setMessages(prev => {
           const updated = [...prev];
-          updated[updated.length - 1] = { role: 'assistant', content: `⚠️ Error: ${err.message}` };
+          updated[updated.length - 1] = { role: 'assistant', content: `⚠️ Error: ${msg}`, reasoning: '' };
           return updated;
         });
       }
@@ -547,9 +591,14 @@ function Homescreen() {
               <div key={i} className={`message message--${msg.role}`}>
                 <span className="message-role">{msg.role === 'user' ? 'You' : 'uXnAI'}</span>
                 <div className="message-content">
-                  {msg.role === 'assistant' && i === messages.length - 1 && phase === 'gathering' && !msg.content
+                  {msg.role === 'assistant' && i === messages.length - 1 && phase === 'gathering' && !msg.content && !msg.reasoning
                     ? <InsightLoader />
-                    : parseMarkdown(msg.content)
+                    : <>
+                        {msg.reasoning && (
+                          <ThinkingBlock content={msg.reasoning} parseMarkdown={parseMarkdown} />
+                        )}
+                        {parseMarkdown(msg.content)}
+                      </>
                   }
                   {phase === 'streaming' && i === messages.length - 1 && msg.role === 'assistant' && (
                     <span className="cursor-blink" />
