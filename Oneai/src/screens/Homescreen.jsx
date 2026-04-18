@@ -4,7 +4,7 @@ import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import './Homescreen.css';
 
-const BACKEND_URL ='https://unxai.onrender.com';
+const BACKEND_URL ='https://uxnai.onrender.com';
 const TEXT_SESSIONS_KEY = 'oneai:textSessions';
 const ACTIVE_TEXT_SESSION_KEY = 'oneai:activeTextSessionId';
 const MODEL_DISPLAY = 'uXnAI · 3-Model Pipeline';

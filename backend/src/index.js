@@ -7,10 +7,10 @@ import auth, { requireAuth } from './auth.js'
 
 const app = new Hono()
 
-const ALLOWED_ORIGINS = ['http://localhost:5173', 'https://unxai.vercel.app', 'http://127.0.0.1:5173']
+const ALLOWED_ORIGINS = ['http://localhost:5173', 'https://uxnai.vercel.app', 'http://127.0.0.1:5173', 'https://uxnai.onrender.com']
 
 const corsHeaders = (origin) => ({
-  'Access-Control-Allow-Origin': ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[1],
+  'Access-Control-Allow-Origin': ALLOWED_ORIGINS.includes(origin) ? origin : 'https://uxnai.onrender.com',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type',
   'Access-Control-Allow-Credentials': 'true',
@@ -49,7 +49,7 @@ app.post('/api/chat', requireAuth, async (c) => {
   if (!message || message.trim() === '') return c.json({ error: 'Message cannot be empty' }, 400)
 
   const origin = c.req.header('origin') || ''
-  const referer = process.env.HTTP_REFERER || origin || 'https://unxai.vercel.app'
+  const referer = process.env.HTTP_REFERER || origin || 'https://uxnai.vercel.app'
   const stream = createSynthesisStream(message.trim(), process.env.OPENROUTER_API_KEY, referer)
 
   return new Response(stream, {

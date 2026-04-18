@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 
-const API = import.meta.env.VITE_API_URL || 'https://unxai.onrender.com'
+const API = import.meta.env.VITE_API_URL || 'https://uxnai.onrender.com'
 
 // ── Fetch helper with proper CORS + error handling ──────────────────────────
 const apiCall = async (endpoint, options = {}) => {
