@@ -7,7 +7,7 @@ import auth, { requireAuth } from './auth.js'
 
 const app = new Hono()
 
-const ALLOWED_ORIGINS = ['http://localhost:5173', 'https://unxai.vercel.app']
+const ALLOWED_ORIGINS = ['http://localhost:5173', 'https://unxai.vercel.app', 'http://127.0.0.1:5173']
 
 const corsHeaders = (origin) => ({
   'Access-Control-Allow-Origin': ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[1],

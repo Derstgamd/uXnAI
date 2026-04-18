@@ -11,34 +11,6 @@ const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET)
 const COOKIE_NAME = 'uxnai_session'
 const SESSION_DAYS = 30
 
-// ── CORS middleware ──────────────────────────────────────────────────────────
-const ALLOWED_ORIGINS = [
-  'http://localhost:3000',
-  'http://localhost:5173',
-  'http://127.0.0.1:5173',
-  'https://unxai.vercel.app',
-].filter(Boolean)
-
-auth.use(async (c, next) => {
-  const origin = c.req.header('origin')
-  
-  // Allow if origin is in whitelist or no origin (same-site requests)
-  if (!origin || ALLOWED_ORIGINS.includes(origin)) {
-    c.header('Access-Control-Allow-Origin', origin || '*')
-    c.header('Access-Control-Allow-Credentials', 'true')
-    c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-    c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-    c.header('Access-Control-Max-Age', '86400')
-  }
-
-  // Handle preflight
-  if (c.req.method === 'OPTIONS') {
-    return c.text('', 204)
-  }
-
-  await next()
-})
-
 // ── In-memory rate limiter ────────────────────────────────────────────────────
 const rateLimitStore = new Map()
 
