@@ -1,13 +1,15 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import './App.css'
 import Sidebar from './screens/Sidebar.jsx'
 import SideMenu from './screens/SideMenu.jsx'
-import Homescreen from './screens/Homescreen.jsx'
-import SettingsScreen from './screens/Settings.jsx'
 import Welcome from './screens/Welcome.jsx'
 import { useAuth } from '../components/useAuth.js'
 import { ChevronLeft, Menu, User, Settings, MessageCirclePlus } from 'lucide-react'
+
+// Heavy routes loaded only when navigated to (keeps initial bundle small)
+const Homescreen = lazy(() => import('./screens/Homescreen.jsx'))
+const SettingsScreen = lazy(() => import('./screens/Settings.jsx'))
 
 function MainLayout() {
   const [panelOpen, setPanelOpen] = useState(true)
@@ -41,19 +43,6 @@ function MainLayout() {
         >
           {panelOpen ? <ChevronLeft size={20} /> : <Menu size={20} />}
         </button>
-
-        {isLoggedIn && (
-          <button
-            className="new_chat"
-            type="button"
-            onClick={() => window.dispatchEvent(new Event('oneai:newChat'))}
-            title="New chat"
-            aria-label="New chat"
-          >
-            <MessageCirclePlus size={20} />
-          </button>
-        )}
-
         <div className="panel-content">
           {loading ? (
             <div className="auth-loading">
@@ -70,7 +59,6 @@ function MainLayout() {
             />
           )}
         </div>
-
         {!panelOpen && (
           <div className="panel-footer">
             <button className="footer-btn" title="User Profile" aria-label="User Profile">
@@ -91,26 +79,18 @@ function MainLayout() {
           </div>
         )}
       </div>
-
       <div className="content">
-        <h1>uXnAI</h1>
+        <h1>Perception</h1>
         <Outlet context={{ user, logout }} />
       </div>
     </div>
   )
 }
 
-// ── Welcome route — handles all auth actions directly ────────────────────────
 function WelcomeRoute() {
   const navigate = useNavigate()
   const { user, loading, error, login, register, loginWithGoogle } = useAuth()
 
-  // Already logged in — skip welcome
-  useEffect(() => {
-    if (!loading && user) navigate('/chat', { replace: true })
-  }, [user, loading, navigate])
-
-  // Google OAuth redirect back
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     if (params.get('auth_success')) {
@@ -123,13 +103,10 @@ function WelcomeRoute() {
   }, [navigate])
 
   if (loading) return null
+  if (user) return <Navigate to="/chat" replace />
 
   const handleTryFree = () => navigate('/chat')
-
   const handleGoogleClick = () => loginWithGoogle()
-
-  // For the double-click email flow on the welcome page we just navigate to /chat
-  // The sidebar inside MainLayout will handle the actual login form
   const handleEmailClick = () => navigate('/chat')
 
   return (
@@ -142,7 +119,6 @@ function WelcomeRoute() {
   )
 }
 
-// ── Guard: redirect to / if not logged in ────────────────────────────────────
 function ProtectedRoute() {
   const { user, loading } = useAuth()
   if (loading) return null
@@ -150,13 +126,21 @@ function ProtectedRoute() {
   return <Outlet />
 }
 
+function RouteFallback() {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', width: '100%', background: 'var(--bg)' }}>
+      <span className="auth-loading-dot" />
+    </div>
+  )
+}
+
 function App() {
   return (
     <Routes>
       <Route path="/" element={<WelcomeRoute />} />
       <Route element={<MainLayout />}>
-        <Route path="/chat" element={<Homescreen />} />
-        <Route path="/settings" element={<SettingsScreen />} />
+        <Route path="/chat" element={<Suspense fallback={<RouteFallback />}><Homescreen /></Suspense>} />
+        <Route path="/settings" element={<Suspense fallback={<RouteFallback />}><SettingsScreen /></Suspense>} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

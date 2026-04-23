@@ -6,7 +6,7 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 50%, #0d0d0d 100%);
+  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 50%, #f0f0f0 100%);
 }
 
 .welcome-root .noise {
@@ -22,8 +22,8 @@
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(0deg, transparent 24%, rgba(255, 255, 255, 0.05) 25%, rgba(255, 255, 255, 0.05) 26%, transparent 27%, transparent 74%, rgba(255, 255, 255, 0.05) 75%, rgba(255, 255, 255, 0.05) 76%, transparent 77%, transparent),
-    linear-gradient(90deg, transparent 24%, rgba(255, 255, 255, 0.05) 25%, rgba(255, 255, 255, 0.05) 26%, transparent 27%, transparent 74%, rgba(255, 255, 255, 0.05) 75%, rgba(255, 255, 255, 0.05) 76%, transparent 77%, transparent);
+    linear-gradient(0deg, transparent 24%, rgba(255, 255, 255, 0.03) 25%, rgba(255, 255, 255, 0.03) 26%, transparent 27%, transparent 74%, rgba(255, 255, 255, 0.03) 75%, rgba(255, 255, 255, 0.03) 76%, transparent 77%, transparent),
+    linear-gradient(90deg, transparent 24%, rgba(255, 255, 255, 0.03) 25%, rgba(255, 255, 255, 0.03) 26%, transparent 27%, transparent 74%, rgba(255, 255, 255, 0.03) 75%, rgba(255, 255, 255, 0.03) 76%, transparent 77%, transparent);
   background-size: 50px 50px;
   opacity: 0.1;
   pointer-events: none;
@@ -37,7 +37,7 @@
   transform: translate(-50%, -50%);
   width: 600px;
   height: 600px;
-  background: radial-gradient(circle, rgba(255, 193, 7, 0.15) 0%, transparent 70%);
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 15%, transparent 85%) 0%, transparent 70%);
   border-radius: 50%;
   filter: blur(80px);
   pointer-events: none;
@@ -68,7 +68,7 @@
 .welcome-title {
   font-size: 3.5rem;
   font-weight: 700;
-  background: linear-gradient(135deg, #ffc107 0%, #ffb300 100%);
+  background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 85%, var(--fg) 15%) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -79,7 +79,7 @@
 
 .welcome-subtitle {
   font-size: 1.3rem;
-  color: #a0aec0;
+  color: var(--muted);
   margin: 0;
   font-weight: 400;
   animation: fadeInUp 0.8s ease-out 0.2s both;
@@ -91,18 +91,18 @@
   font-weight: 600;
   border: none;
   border-radius: 8px;
-  background: linear-gradient(135deg, #ffc107 0%, #ffb300 100%);
-  color: #1a1a1a;
+  background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 85%, var(--fg) 15%) 100%);
+  color: var(--bg);
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(255, 193, 7, 0.4);
+  box-shadow: 0 4px 15px color-mix(in srgb, var(--accent) 40%, transparent 60%);
   animation: fadeInUp 0.8s ease-out 0.4s both;
 }
 
 .btn-try-free:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(255, 193, 7, 0.6);
-  background: linear-gradient(135deg, #ffb300 0%, #ffa000 100%);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 60%, transparent 40%);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 85%, var(--fg) 15%) 0%, color-mix(in srgb, var(--accent) 70%, var(--fg) 30%) 100%);
 }
 
 .btn-try-free:active {
@@ -122,11 +122,11 @@
 .sep-line {
   flex: 1;
   height: 1px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--border);
 }
 
 .sep-text {
-  color: #a0aec0;
+  color: var(--muted);
   font-size: 0.875rem;
   white-space: nowrap;
 }
@@ -149,37 +149,37 @@
 }
 
 .btn-google {
-  background: #222;
-  color: #f0f0f0;
-  border: 1px solid #3a3a3a;
+  background: var(--surface2);
+  color: var(--fg);
+  border: 1px solid var(--border);
   animation-delay: 0.55s;
 }
 
 .btn-google:hover {
-  background: #2a2a2a;
-  border-color: #4a4a4a;
+  background: var(--surface);
+  border-color: color-mix(in srgb, var(--border) 55%, var(--accent) 45%);
 }
 
 .btn-email {
-  background: #222;
-  color: #f0f0f0;
-  border: 1px solid #3a3a3a;
+  background: var(--surface2);
+  color: var(--fg);
+  border: 1px solid var(--border);
   animation-delay: 0.65s;
 }
 
 .btn-email:hover {
-  background: #2a2a2a;
-  border-color: #4a4a4a;
+  background: var(--surface);
+  border-color: color-mix(in srgb, var(--border) 55%, var(--accent) 45%);
 }
 
 .btn-email--primed {
-  background: #ffb300;
-  color: #1a1a1a;
-  border-color: #ffc107;
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
 }
 
 .btn-email--primed:hover {
-  background: #ffa000;
+  background: color-mix(in srgb, var(--accent) 85%, var(--fg) 15%);
 }
 
 .btn-icon {
@@ -195,7 +195,7 @@
 
 .email-hint {
   font-size: 0.85rem;
-  color: #a0aec0;
+  color: var(--muted);
   margin: 8px 0 0 0;
   text-align: center;
   animation: fadeInUp 0.8s ease-out 0.75s both;
@@ -207,12 +207,12 @@
   justify-content: center;
   gap: 16px;
   padding-top: 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--border);
   animation: fadeInUp 0.8s ease-out 0.6s both;
 }
 
 .footer-link {
-  color: #a0aec0;
+  color: var(--muted);
   text-decoration: none;
   font-size: 0.875rem;
   transition: color 0.3s ease;
@@ -220,11 +220,11 @@
 }
 
 .footer-link:hover {
-  color: #ffffff;
+  color: var(--fg);
 }
 
 .footer-separator {
-  color: #4b5563;
+  color: var(--muted);
   font-size: 0.875rem;
 }
 
@@ -277,7 +277,7 @@
   display: inline-block;
   width: 12px;
   height: 12px;
-  background-color: #ffc107;
+  background-color: var(--accent);
   margin-left: 8px;
   animation: rotate 2s linear infinite;
   vertical-align: middle;
@@ -288,7 +288,7 @@
   display: inline-block;
   width: 2px;
   height: 1.3em;
-  background-color: #ffc107;
+  background-color: var(--accent);
   margin-left: 2px;
   animation: blink 0.7s infinite;
   vertical-align: middle;

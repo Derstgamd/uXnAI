@@ -33,8 +33,11 @@ const apiCall = async (endpoint, options = {}) => {
 }
 
 export function useAuth() {
-  const [user, setUser] = useState(undefined) // undefined = loading, null = logged out
-  const [loading, setLoading] = useState(true)
+  // Seed from sessionStorage so tab-level navigation never shows loading spinner
+  const cached = (() => { try { const r = sessionStorage.getItem('oneai:session'); return r ? JSON.parse(r) : undefined } catch { return undefined } })()
+
+  const [user, setUser] = useState(cached !== undefined ? cached : undefined) // undefined = loading, null = logged out
+  const [loading, setLoading] = useState(cached === undefined) // skip loading if we have a cache hit
   const [error, setError] = useState(null)
 
   // ── Fetch current session on mount ────────────────────────────────────────
@@ -44,17 +47,22 @@ export function useAuth() {
         const { res, data } = await apiCall('/auth/me')
         if (res.ok && data.user) {
           setUser(data.user)
+          try { sessionStorage.setItem('oneai:session', JSON.stringify(data.user)) } catch {}
         } else {
           setUser(null)
+          try { sessionStorage.removeItem('oneai:session') } catch {}
         }
       } catch (err) {
         console.error('Session fetch error:', err)
         setUser(null)
+        try { sessionStorage.removeItem('oneai:session') } catch {}
       } finally {
         setLoading(false)
       }
     }
 
+    // If we have a cached session, still revalidate in the background
+    // but don't block the UI on it
     fetchSession()
 
     // Handle Google OAuth redirect back to frontend
@@ -134,6 +142,7 @@ export function useAuth() {
     } finally {
       setUser(null)
       setError(null)
+      try { sessionStorage.removeItem('oneai:session') } catch {}
     }
   }, [])
 

@@ -1,55 +1,51 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { SendHorizontal, Lightbulb, Code, PenTool, Compass, Construction, X, RefreshCw, Square, Plus, ThumbsUp, ThumbsDown, Copy, ChevronDown, Cpu, Check } from 'lucide-react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import {
+  SendHorizontal, Lightbulb, Code, PenTool, Compass,
+  Construction, X, RefreshCw, Square, Plus, ThumbsUp,
+  ThumbsDown, Copy, ChevronDown, Cpu, Check, Brain, Zap
+} from 'lucide-react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import './Homescreen.css';
 
-const BACKEND_URL ='https://uxnai.onrender.com';
+const BACKEND_URL = 'https://uxnai.onrender.com';
 const TEXT_SESSIONS_KEY = 'oneai:textSessions';
 const ACTIVE_TEXT_SESSION_KEY = 'oneai:activeTextSessionId';
-const MODEL_DISPLAY = 'uXnAI · 3-Model Pipeline';
+const MODEL_DISPLAY = 'Perception · MoA Pipeline';
 
-const readJson = (key, fallback) => {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw);
-  } catch { return fallback; }
+const ROLE_COLORS = {
+  Analyst: { accent: '#60a5fa', bg: 'rgba(96,165,250,0.06)', border: 'rgba(96,165,250,0.15)' },
+  Contrarian: { accent: '#f87171', bg: 'rgba(248,113,113,0.06)', border: 'rgba(248,113,113,0.15)' },
+  Contextualiser: { accent: '#34d399', bg: 'rgba(52,211,153,0.06)', border: 'rgba(52,211,153,0.15)' },
+  Pragmatist: { accent: '#a78bfa', bg: 'rgba(167,139,250,0.06)', border: 'rgba(167,139,250,0.15)' },
+  default: { accent: '#f59e0b', bg: 'rgba(245,158,11,0.06)', border: 'rgba(245,158,11,0.15)' },
 };
+const roleStyle = (role) => ROLE_COLORS[role] || ROLE_COLORS.default;
 
-const writeJson = (key, value) => {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
-};
+const readJson = (key, fb) => { try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : fb; } catch { return fb; } };
+const writeJson = (key, v) => { try { localStorage.setItem(key, JSON.stringify(v)); } catch { } };
 
-const slugTitleFromText = (text) => {
+const slugTitle = (text) => {
   const t = (text || '').replace(/\s+/g, ' ').trim();
   if (!t) return 'New chat';
-  const firstLine = t.split('\n')[0].trim();
-  return firstLine.length > 60 ? `${firstLine.slice(0, 60)}…` : firstLine;
+  const l = t.split('\n')[0].trim();
+  return l.length > 60 ? `${l.slice(0, 60)}…` : l;
 };
 
-// ── Code block with copy button ──────────────────────────────────────────────
+// =============================================================================
+// Sub-components
+// =============================================================================
+
 function CodeBlock({ lang, code }) {
   const [copied, setCopied] = useState(false);
-
   const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {}
+    try { await navigator.clipboard.writeText(code); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { }
   };
-
   return (
     <pre className="markdown-code-block">
       <div className="code-block-header">
         <span className="markdown-code-lang">{lang || 'code'}</span>
-        <button
-          type="button"
-          className={`code-copy-btn ${copied ? 'code-copy-btn--copied' : ''}`}
-          onClick={handleCopy}
-          title="Copy code"
-        >
+        <button type="button" className={`code-copy-btn ${copied ? 'code-copy-btn--copied' : ''}`} onClick={handleCopy} title="Copy code">
           {copied ? <Check size={12} /> : <Copy size={12} />}
           <span>{copied ? 'Copied!' : 'Copy'}</span>
         </button>
@@ -59,12 +55,57 @@ function CodeBlock({ lang, code }) {
   );
 }
 
-// ── Insight loader ────────────────────────────────────────────────────────────
-function InsightLoader() {
+// ── Deliberation panel ────────────────────────────────────────────────────────
+function DeliberationPanel({ deliberation, activeRound }) {
+  const [open, setOpen] = useState(true);
+  const models = Object.entries(deliberation);
+  if (!models.length) return null;
+
   return (
-    <div className="insight-loader">
-      <Cpu size={13} className="insight-loader-icon" />
-      <span>Consulting specialist models…</span>
+    <div className="deliberation-panel">
+      <button className="deliberation-toggle" onClick={() => setOpen(o => !o)} type="button">
+        <Brain size={12} />
+        <span>Deliberation</span>
+        {activeRound > 0 && <span className="deliberation-round-badge">Round {activeRound}</span>}
+        <ChevronDown
+          size={12}
+          style={{ marginLeft: 'auto', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }}
+        />
+      </button>
+      {open && (
+        <div className="deliberation-body">
+          {models.map(([modelName, { role, rounds }]) => {
+            const { accent, bg } = roleStyle(role);
+            // BUG FIX 1: Object.keys on a numeric-keyed object can return strings;
+            // guard against empty rounds object before calling Math.max
+            const roundKeys = Object.keys(rounds).map(Number);
+            const latestRound = roundKeys.length ? Math.max(...roundKeys) : 1;
+            const content = rounds[latestRound] || '';
+            return (
+              <div
+                key={modelName}
+                className="deliberation-model"
+                style={{ '--model-accent': accent, '--model-bg': bg }}
+              >
+                <div className="deliberation-model-header">
+                  <span className="deliberation-model-dot" />
+                  <span className="deliberation-model-name">{modelName}</span>
+                  <span className="deliberation-model-role">{role}</span>
+                  {latestRound > 1 && (
+                    <span className="deliberation-model-round">R{latestRound}</span>
+                  )}
+                </div>
+                <div className="deliberation-model-content">
+                  {content
+                    ? content
+                    : <span className="deliberation-thinking">thinking<span className="deliberation-dots" /></span>
+                  }
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -72,22 +113,23 @@ function InsightLoader() {
 // ── Collapsible reasoning block ───────────────────────────────────────────────
 function ThinkingBlock({ content, parseMarkdown }) {
   const [open, setOpen] = useState(false);
-
   return (
     <div className="think-block">
       <button className="think-toggle" onClick={() => setOpen(o => !o)} type="button">
         <Cpu size={12} />
         <span>Reasoning</span>
-        <ChevronDown
-          size={12}
-          style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }}
-        />
+        <ChevronDown size={12} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
       </button>
-      {open && (
-        <div className="think-content">
-          {parseMarkdown(content)}
-        </div>
-      )}
+      {open && <div className="think-content">{parseMarkdown(content)}</div>}
+    </div>
+  );
+}
+
+function InsightLoader() {
+  return (
+    <div className="insight-loader">
+      <Cpu size={13} className="insight-loader-icon" />
+      <span>Consulting specialist models…</span>
     </div>
   );
 }
@@ -100,77 +142,35 @@ function WipToast({ onClose }) {
         <div className="wip-icon-wrap"><Construction size={22} /></div>
         <div className="wip-body">
           <h3 className="wip-title">Under Development</h3>
-          <p className="wip-desc">
-            uXnAI is actively being built. New features and improvements drop every day — check back tomorrow for what's new.
-          </p>
+          <p className="wip-desc">Perception is actively being built. New features and improvements drop every day — check back tomorrow for what's new.</p>
         </div>
-        <div className="wip-footer">
-          <RefreshCw size={11} />
-          <span>Check back every day for updates</span>
-        </div>
+        <div className="wip-footer"><RefreshCw size={11} /><span>Check back every day for updates</span></div>
       </div>
     </div>
   );
 }
 
-function Homescreen() {
-  const [query, setQuery] = useState('');
-  const [showWip, setShowWip] = useState(false);
-  const [messages, setMessages] = useState([]);
-  const [phase, setPhase] = useState('idle'); // 'idle' | 'gathering' | 'streaming'
-  const [hasStarted, setHasStarted] = useState(false);
-  const [showModelDropdown, setShowModelDropdown] = useState(false);
-  const [messageFeedback, setMessageFeedback] = useState({});
-  const [copiedMessageId, setCopiedMessageId] = useState(null);
-  const [activeSessionId, setActiveSessionId] = useState(
-    () => localStorage.getItem(ACTIVE_TEXT_SESSION_KEY) || ''
-  );
-  const [showScrollButton, setShowScrollButton] = useState(false);
-  const abortRef = useRef(null);
-  const inputRef = useRef(null);
-  const messagesListRef = useRef(null);
-  const autoScrollRef = useRef(true);
-
-  const isStreaming = phase !== 'idle';
-
-  // ── Scroll ──────────────────────────────────────────────────────────────────
-  const handleScroll = (e) => {
-    const el = e.target;
-    const atBottom = Math.abs(el.scrollHeight - el.clientHeight - el.scrollTop) < 50;
-    setShowScrollButton(!atBottom);
-    autoScrollRef.current = atBottom;
-  };
-
-  const scrollToBottom = () => {
-    messagesListRef.current?.scrollTo({ top: messagesListRef.current.scrollHeight, behavior: 'smooth' });
-    autoScrollRef.current = true;
-  };
-
-  useEffect(() => {
-    if (autoScrollRef.current) {
-      setTimeout(() => messagesListRef.current?.scrollTo({ top: messagesListRef.current?.scrollHeight, behavior: 'smooth' }), 0);
-    }
-  }, [messages]);
-
-  // ── Inline parser ────────────────────────────────────────────────────────────
-  const parseInline = (text) => {
+// =============================================================================
+// Markdown parser
+// =============================================================================
+function useMarkdown() {
+  const parseInline = useCallback((text) => {
+    if (!text) return text;
     const parts = [];
     let lastIndex = 0;
     const tokenRegex = /\\\((.+?)\\\)|\$(?!\$)([^$\n]+?)\$(?!\$)|`([^`]+)`|\*\*([^*]+)\*\*|~~([^~]+)~~|\*([^*]+)\*/g;
     const allMatches = [];
     let match;
-
     while ((match = tokenRegex.exec(text)) !== null) {
       let type, content;
-      if      (match[1] !== undefined) { type = 'math';   content = match[1]; }
-      else if (match[2] !== undefined) { type = 'math';   content = match[2]; }
-      else if (match[3] !== undefined) { type = 'code';   content = match[3]; }
-      else if (match[4] !== undefined) { type = 'bold';   content = match[4]; }
+      if (match[1] !== undefined) { type = 'math'; content = match[1]; }
+      else if (match[2] !== undefined) { type = 'math'; content = match[2]; }
+      else if (match[3] !== undefined) { type = 'code'; content = match[3]; }
+      else if (match[4] !== undefined) { type = 'bold'; content = match[4]; }
       else if (match[5] !== undefined) { type = 'strike'; content = match[5]; }
-      else                             { type = 'italic'; content = match[6]; }
+      else { type = 'italic'; content = match[6]; }
       allMatches.push({ start: match.index, end: tokenRegex.lastIndex, content, type });
     }
-
     allMatches.forEach((m, i) => {
       if (m.start > lastIndex) parts.push(text.substring(lastIndex, m.start));
       if (m.type === 'math') {
@@ -178,23 +178,24 @@ function Homescreen() {
           const html = katex.renderToString(m.content, { throwOnError: false });
           parts.push(<span key={`math-${i}`} className="markdown-inline-math" dangerouslySetInnerHTML={{ __html: html }} />);
         } catch { parts.push(`$${m.content}$`); }
-      } else if (m.type === 'code')   parts.push(<code    key={`c-${i}`} className="markdown-inline-code">{m.content}</code>);
-      else if (m.type === 'bold')     parts.push(<strong  key={`b-${i}`}>{m.content}</strong>);
-      else if (m.type === 'strike')   parts.push(<del     key={`s-${i}`}>{m.content}</del>);
-      else if (m.type === 'italic')   parts.push(<em      key={`e-${i}`}>{m.content}</em>);
+      } else if (m.type === 'code') parts.push(<code key={`c-${i}`} className="markdown-inline-code">{m.content}</code>);
+      else if (m.type === 'bold') parts.push(<strong key={`b-${i}`}>{m.content}</strong>);
+      else if (m.type === 'strike') parts.push(<del key={`s-${i}`}>{m.content}</del>);
+      else if (m.type === 'italic') parts.push(<em key={`e-${i}`}>{m.content}</em>);
       lastIndex = m.end;
     });
-
     if (lastIndex < text.length) parts.push(text.substring(lastIndex));
     return parts.length > 0 ? parts : text;
-  };
+  }, []);
 
-  // ── Block parser ─────────────────────────────────────────────────────────────
-  const parseMarkdown = (text) => {
+  const parseMarkdown = useCallback((text) => {
+    // BUG FIX 2: parseMarkdown was not guarding against undefined/null —
+    // causes a crash when msg.content is '' during deliberation phase
+    if (!text) return null;
+
     const elements = [];
     const lines = text.split('\n');
-    let ei = 0;
-    let inCode = false, inMath = false, inLatex = false;
+    let ei = 0, inCode = false, inMath = false, inLatex = false;
     let codeLang = '', codeLines = [], mathLines = [];
     let listType = null, listItems = [];
 
@@ -222,69 +223,39 @@ function Homescreen() {
     };
 
     const splitPipe = (row) => row.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
-    const normRow   = (row) => row.replace(/^\s*#{1,6}\s+/, '').trim();
-    const isSep     = (row) => { const n = row.trim().replace(/^\|/, '').replace(/\|$/, ''); return n && n.split('|').every(c => /^:?-{3,}:?$/.test(c.trim())); };
-    const isPipe    = (row) => row.includes('|') && splitPipe(row).length >= 2;
+    const normRow = (row) => row.replace(/^\s*#{1,6}\s+/, '').trim();
+    const isSep = (row) => { const n = row.trim().replace(/^\|/, '').replace(/\|$/, ''); return n && n.split('|').every(c => /^:?-{3,}:?$/.test(c.trim())); };
+    const isPipe = (row) => row.includes('|') && splitPipe(row).length >= 2;
 
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const t = line.trim();
+      const line = lines[i], t = line.trim();
 
-      // Code blocks
       if (t.startsWith('```')) {
-        if (!inCode) {
-          flushList(); inCode = true; codeLang = t.slice(3).trim(); codeLines = [];
-        } else {
-          elements.push(<CodeBlock key={`code-${ei++}`} lang={codeLang} code={codeLines.join('\n')} />);
-          inCode = false; codeLang = ''; codeLines = [];
-        }
+        if (!inCode) { flushList(); inCode = true; codeLang = t.slice(3).trim(); codeLines = []; }
+        else { elements.push(<CodeBlock key={`code-${ei++}`} lang={codeLang} code={codeLines.join('\n')} />); inCode = false; codeLang = ''; codeLines = []; }
         continue;
       }
       if (inCode) { codeLines.push(line); continue; }
 
-      // $$ math
       if (t.startsWith('$$')) {
         if (!inMath) {
           flushList(); inMath = true; mathLines = [];
           const rest = t.slice(2).trim();
-          if (rest && t.endsWith('$$') && rest !== '$$') { elements.push(mathBlock(rest.endsWith('$$') ? rest.slice(0,-2).trim() : rest, `mb-${ei++}`)); inMath = false; }
+          if (rest && t.endsWith('$$') && rest !== '$$') { elements.push(mathBlock(rest.endsWith('$$') ? rest.slice(0, -2).trim() : rest, `mb-${ei++}`)); inMath = false; }
           else if (rest) mathLines.push(rest);
         } else {
-          const rest = t.slice(0,-2).trim();
+          const rest = t.slice(0, -2).trim();
           if (rest) mathLines.push(rest);
-          elements.push(mathBlock(mathLines.join('\n'), `mb-${ei++}`));
-          inMath = false; mathLines = [];
+          elements.push(mathBlock(mathLines.join('\n'), `mb-${ei++}`)); inMath = false; mathLines = [];
         }
         continue;
       }
       if (inMath) { mathLines.push(line); continue; }
 
-      // \[ \] math
-      if (t === '\\[' || t.startsWith('\\[')) {
-        if (!inLatex) {
-          flushList(); inLatex = true; mathLines = [];
-          const rest = t.slice(2).trim();
-          if (rest.endsWith('\\]')) { elements.push(mathBlock(rest.slice(0,-2).trim(), `lb-${ei++}`)); inLatex = false; }
-          else if (rest) mathLines.push(rest);
-        }
-        continue;
-      }
-      if (inLatex) {
-        if (t === '\\]' || t.endsWith('\\]')) {
-          const rest = t.endsWith('\\]') ? t.slice(0,-2).trim() : '';
-          if (rest) mathLines.push(rest);
-          elements.push(mathBlock(mathLines.join('\n'), `lb-${ei++}`));
-          inLatex = false; mathLines = [];
-        } else mathLines.push(line);
-        continue;
-      }
-
-      // Headings
       const hm = line.match(/^(#{1,6})\s+(.+)$/);
       if (hm) { flushList(); elements.push(React.createElement(`h${hm[1].length}`, { key: ei++, className: `markdown-h${hm[1].length}` }, parseInline(hm[2]))); continue; }
 
-      // Tables
-      const cl = normRow(line), nl = normRow(lines[i+1] || '');
+      const cl = normRow(line), nl = normRow(lines[i + 1] || '');
       if (isPipe(cl) && (isSep(nl) || isPipe(nl))) {
         flushList();
         const hcells = splitPipe(cl), hasSep = isSep(nl);
@@ -294,22 +265,19 @@ function Homescreen() {
         elements.push(
           <div key={`tw-${ei++}`} className="markdown-table-wrap">
             <table className="markdown-table">
-              <thead><tr>{hcells.map((c,idx) => <th key={idx} style={{textAlign: aligns[idx]||'left'}}>{parseInline(c)}</th>)}</tr></thead>
-              {rows.length > 0 && <tbody>{rows.map((row,ri) => <tr key={ri}>{hcells.map((_,ci) => <td key={ci} style={{textAlign: aligns[ci]||'left'}}>{parseInline(row[ci]||'')}</td>)}</tr>)}</tbody>}
+              <thead><tr>{hcells.map((c, idx) => <th key={idx} style={{ textAlign: aligns[idx] || 'left' }}>{parseInline(c)}</th>)}</tr></thead>
+              {rows.length > 0 && <tbody>{rows.map((row, ri) => <tr key={ri}>{hcells.map((_, ci) => <td key={ci} style={{ textAlign: aligns[ci] || 'left' }}>{parseInline(row[ci] || '')}</td>)}</tr>)}</tbody>}
             </table>
           </div>
         );
         i = j - 1; continue;
       }
 
-      // HR
       if (/^(-{3,}|\*{3,}|_{3,})$/.test(t)) { flushList(); elements.push(<hr key={`hr-${ei++}`} className="markdown-hr" />); continue; }
 
-      // Blockquote
       const qm = line.match(/^>\s?(.*)$/);
       if (qm) { flushList(); elements.push(<blockquote key={`q-${ei++}`} className="markdown-quote">{parseInline(qm[1])}</blockquote>); continue; }
 
-      // Lists
       const ul = line.match(/^\s*[-*+]\s+(.*)$/), ol = line.match(/^\s*\d+\.\s+(.*)$/);
       if (ul || ol) {
         const ct = ol ? 'ordered' : 'unordered', content = (ul?.[1] || ol?.[1] || '').trim();
@@ -320,15 +288,13 @@ function Homescreen() {
         continue;
       }
 
-      // Empty line
       if (!t) { flushList(); elements.push(<div key={`sp-${ei++}`} className="markdown-spacing" />); continue; }
 
-      // Paragraph
       flushList();
       const pLines = [line]; let j = i + 1;
       while (j < lines.length) {
         const nt = lines[j].trim();
-        if (!nt || nt.startsWith('#') || nt.startsWith('>') || nt.match(/^\s*[-*+]\s+/) || nt.match(/^\s*\d+\.\s+/) || nt.startsWith('```') || nt.startsWith('$$') || nt.startsWith('\\[')) break;
+        if (!nt || nt.startsWith('#') || nt.startsWith('>') || nt.match(/^\s*[-*+]\s+/) || nt.match(/^\s*\d+\.\s+/) || nt.startsWith('```') || nt.startsWith('$$')) break;
         pLines.push(lines[j]); j++;
       }
       elements.push(<p key={`p-${ei++}`} className="markdown-p">{parseInline(pLines.map(pl => pl.trim()).join(' '))}</p>);
@@ -339,30 +305,167 @@ function Homescreen() {
     if ((inMath || inLatex) && mathLines.length) elements.push(mathBlock(mathLines.join('\n'), `mu-${ei++}`));
     flushList();
     return elements;
-  };
+  }, [parseInline]);
 
-  const suggestions = [
-    { icon: <Compass size={18} />, text: "Plan a 3-day trip to Tokyo" },
-    { icon: <Lightbulb size={18} />, text: "Explain quantum physics simply" },
-    { icon: <Code size={18} />, text: "Help me debug a React useEffect" },
-    { icon: <PenTool size={18} />, text: "Write a professional email for a job" },
-  ];
+  return { parseMarkdown, parseInline };
+}
 
-  const handleStop = () => {
-    if (abortRef.current) {
-      abortRef.current.abort();
-      abortRef.current = null;
-      setPhase('idle');
+// =============================================================================
+// Main component
+// =============================================================================
+function Homescreen() {
+  const [query, setQuery] = useState('');
+  const [showWip, setShowWip] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [phase, setPhase] = useState('idle'); // 'idle' | 'deliberating' | 'synthesising'
+  const [hasStarted, setHasStarted] = useState(false);
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const [messageFeedback, setMessageFeedback] = useState({});
+  const [copiedMessageId, setCopiedMessageId] = useState(null);
+  const [activeSessionId, setActiveSessionId] = useState(() => localStorage.getItem(ACTIVE_TEXT_SESSION_KEY) || '');
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [firstUnreadIdx, setFirstUnreadIdx] = useState(null);
+
+  const abortRef = useRef(null);
+  const inputRef = useRef(null);
+  const messagesListRef = useRef(null);
+  const autoScrollRef = useRef(true);
+  const messageRefs = useRef([]);
+  const prevMsgCount = useRef(0);
+
+  const { parseMarkdown } = useMarkdown();
+
+  const isStreaming = phase !== 'idle';
+
+  // ── Scroll ──────────────────────────────────────────────────────────────────
+  const scrollToBottom = useCallback(() => {
+    messagesListRef.current?.scrollTo({ top: messagesListRef.current.scrollHeight, behavior: 'smooth' });
+    autoScrollRef.current = true;
+    setShowScrollBtn(false);
+    setFirstUnreadIdx(null);
+  }, []);
+
+  const scrollToFirstUnread = useCallback(() => {
+    if (firstUnreadIdx !== null && messageRefs.current[firstUnreadIdx]) {
+      messageRefs.current[firstUnreadIdx].scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      scrollToBottom();
     }
-  };
+  }, [firstUnreadIdx, scrollToBottom]);
 
-  // ── Core: send message → SSE stream ─────────────────────────────────────────
-  const requestAssistantResponse = async (updatedMessages) => {
+  const handleScroll = useCallback((e) => {
+    const el = e.target;
+    const atBottom = Math.abs(el.scrollHeight - el.clientHeight - el.scrollTop) < 60;
+    autoScrollRef.current = atBottom;
+    setShowScrollBtn(!atBottom);
+    // BUG FIX 3: clear firstUnreadIdx when user manually scrolls to bottom
+    if (atBottom) setFirstUnreadIdx(null);
+  }, []);
+
+  useEffect(() => {
+    if (autoScrollRef.current) {
+      setTimeout(() => messagesListRef.current?.scrollTo({ top: messagesListRef.current?.scrollHeight, behavior: 'smooth' }), 0);
+    }
+    const newCount = messages.length;
+    if (newCount > prevMsgCount.current && !autoScrollRef.current && firstUnreadIdx === null) {
+      setFirstUnreadIdx(prevMsgCount.current);
+    }
+    prevMsgCount.current = newCount;
+  }, [messages]);
+
+  // ── Textarea auto-resize ─────────────────────────────────────────────────────
+  const autoResizeTextarea = useCallback((el) => {
+    if (!el) return;
+    const maxHeight = window.innerHeight * 0.25;
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, maxHeight) + 'px';
+  }, []);
+
+  // BUG FIX 4: reset textarea height when query is cleared after send,
+  // not just when query becomes empty (which missed the send case)
+  const resetTextareaHeight = useCallback(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+    }
+  }, []);
+
+  // ── Session helpers ──────────────────────────────────────────────────────────
+  const persistSession = useCallback((sessionId, nextMessages, titleHint) => {
+    const sessions = readJson(TEXT_SESSIONS_KEY, []);
+    const id = String(sessionId || '');
+    if (!id) return;
+    const existing = Array.isArray(sessions) ? sessions : [];
+    const idx = existing.findIndex(s => String(s.id) === id);
+    // Strip deliberation — only role + final content persisted
+    const persistable = nextMessages.map(m => ({ role: m.role, content: m.content }));
+    const payload = { id, title: titleHint || existing[idx]?.title || 'New chat', updatedAt: Date.now(), messages: persistable };
+    const next = idx >= 0
+      ? [...existing.slice(0, idx), { ...existing[idx], ...payload }, ...existing.slice(idx + 1)]
+      : [payload, ...existing];
+    writeJson(TEXT_SESSIONS_KEY, next);
+    window.dispatchEvent(new Event('oneai:textSessionsUpdated'));
+  }, []);
+
+  useEffect(() => {
+    const onNewChat = () => {
+      setActiveSessionId('');
+      localStorage.setItem(ACTIVE_TEXT_SESSION_KEY, '');
+      setMessages([]); setQuery(''); setHasStarted(false);
+      setMessageFeedback({}); setFirstUnreadIdx(null);
+      resetTextareaHeight();
+      window.setTimeout(() => inputRef.current?.focus(), 0);
+    };
+    const onOpen = (e) => {
+      const id = e?.detail?.id;
+      if (!id) return;
+      const sessions = readJson(TEXT_SESSIONS_KEY, []);
+      const found = (Array.isArray(sessions) ? sessions : []).find(s => String(s.id) === String(id));
+      if (!found) return;
+      setActiveSessionId(String(id));
+      localStorage.setItem(ACTIVE_TEXT_SESSION_KEY, String(id));
+      setMessages(found.messages || []);
+      setHasStarted((found.messages || []).length > 0);
+      setMessageFeedback({}); setFirstUnreadIdx(null);
+      resetTextareaHeight();
+      window.setTimeout(() => inputRef.current?.focus(), 0);
+    };
+    window.addEventListener('oneai:newChat', onNewChat);
+    window.addEventListener('oneai:openTextSession', onOpen);
+    return () => {
+      window.removeEventListener('oneai:newChat', onNewChat);
+      window.removeEventListener('oneai:openTextSession', onOpen);
+    };
+  }, [resetTextareaHeight]);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    const onKey = (e) => {
+      const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
+      const mod = isMac ? e.metaKey : e.ctrlKey;
+      if (mod && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); inputRef.current?.focus(); }
+      if (e.altKey && (e.key === 'n' || e.key === 'N')) { e.preventDefault(); window.dispatchEvent(new Event('oneai:newChat')); }
+      if (e.key === 'Escape' && isStreaming) { e.preventDefault(); handleStop(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isStreaming]);
+
+  const handleStop = useCallback(() => {
+    if (abortRef.current) { abortRef.current.abort(); abortRef.current = null; setPhase('idle'); }
+  }, []);
+
+  // ── Core: send message → multiplexed SSE ────────────────────────────────────
+  const requestAssistantResponse = useCallback(async (updatedMessages) => {
     const userMessage = updatedMessages[updatedMessages.length - 1]?.content;
     if (!userMessage) return;
 
-    setMessages([...updatedMessages, { role: 'assistant', content: '', reasoning: '' }]);
-    setPhase('gathering');
+    setMessages([...updatedMessages, {
+      role: 'assistant',
+      content: '',
+      deliberation: {},
+      activeRound: 0,
+    }]);
+    setPhase('deliberating');
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -378,16 +481,18 @@ function Homescreen() {
 
       if (!res.ok) {
         let errMsg = `Server error ${res.status}`;
-        try { const e = await res.json(); errMsg = e?.error || e?.message || errMsg; } catch {}
+        try { const e = await res.json(); errMsg = e?.error || e?.message || errMsg; } catch { }
         throw new Error(errMsg);
       }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      let firstToken = true;
+      // BUG FIX 5: track whether stream is still live so we don't
+      // set phase to idle prematurely if done event arrives mid-loop
+      let streamDone = false;
 
-      while (true) {
+      while (!streamDone) {
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -397,52 +502,64 @@ function Homescreen() {
 
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6).trim();
-          if (data === '[DONE]') break;
+          const raw = line.slice(6).trim();
+          if (!raw) continue;
 
-          let parsed;
-          try { parsed = JSON.parse(data); } catch { continue; }
+          let evt;
+          try { evt = JSON.parse(raw); } catch { continue; }
 
-          if (parsed.error) throw new Error(
-            typeof parsed.error === 'object' ? JSON.stringify(parsed.error) : String(parsed.error)
-          );
-
-          // Reasoning token (from delta.reasoning field)
-          const reasoningToken = parsed.choices?.[0]?.delta?.reasoning || '';
-          if (reasoningToken) {
+          if (evt.type === 'deliberation') {
+            const { model, role, round, delta } = evt;
+            setPhase('deliberating');
             setMessages(prev => {
               const updated = [...prev];
-              updated[updated.length - 1] = {
-                ...updated[updated.length - 1],
-                reasoning: (updated[updated.length - 1].reasoning || '') + reasoningToken,
-              };
+              const last = { ...updated[updated.length - 1] };
+              const delib = { ...last.deliberation };
+              // BUG FIX 6: always clone the entry deeply to avoid mutating prev state
+              const entry = delib[model]
+                ? { role: delib[model].role, rounds: { ...delib[model].rounds } }
+                : { role, rounds: {} };
+              entry.rounds[round] = (entry.rounds[round] || '') + delta;
+              delib[model] = entry;
+              last.deliberation = delib;
+              last.activeRound = Math.max(last.activeRound || 0, round);
+              updated[updated.length - 1] = last;
               return updated;
             });
           }
 
-          // Content token
-          const token = parsed.choices?.[0]?.delta?.content || '';
-          if (token) {
-            if (firstToken) { setPhase('streaming'); firstToken = false; }
+          else if (evt.type === 'synthesis') {
+            setPhase('synthesising');
             setMessages(prev => {
               const updated = [...prev];
-              updated[updated.length - 1] = {
-                ...updated[updated.length - 1],
-                content: updated[updated.length - 1].content + token,
-              };
+              const last = { ...updated[updated.length - 1] };
+              last.content = (last.content || '') + evt.delta;
+              updated[updated.length - 1] = last;
               return updated;
             });
+          }
+
+          else if (evt.type === 'done') {
+            streamDone = true;
+            break;
+          }
+
+          else if (evt.type === 'error') {
+            throw new Error(evt.message);
           }
         }
       }
     } catch (err) {
       if (err.name !== 'AbortError') {
-        const msg = err?.message && err.message !== '[object Object]'
-          ? err.message
-          : typeof err === 'object' ? JSON.stringify(err) : String(err);
+        const msg = err?.message || String(err);
         setMessages(prev => {
           const updated = [...prev];
-          updated[updated.length - 1] = { role: 'assistant', content: `⚠️ Error: ${msg}`, reasoning: '' };
+          updated[updated.length - 1] = {
+            role: 'assistant',
+            content: `⚠️ Error: ${msg}`,
+            deliberation: {},
+            activeRound: 0,
+          };
           return updated;
         });
       }
@@ -450,71 +567,16 @@ function Homescreen() {
       setPhase('idle');
       abortRef.current = null;
     }
-  };
-
-  const persistSession = (sessionId, nextMessages, titleHint) => {
-    const sessions = readJson(TEXT_SESSIONS_KEY, []);
-    const id = String(sessionId || '');
-    if (!id) return;
-    const existing = Array.isArray(sessions) ? sessions : [];
-    const idx = existing.findIndex(s => String(s.id) === id);
-    const payload = { id, title: titleHint || existing[idx]?.title || 'New chat', updatedAt: Date.now(), messages: nextMessages };
-    const next = idx >= 0
-      ? [...existing.slice(0, idx), { ...existing[idx], ...payload }, ...existing.slice(idx + 1)]
-      : [payload, ...existing];
-    writeJson(TEXT_SESSIONS_KEY, next);
-    window.dispatchEvent(new Event('oneai:textSessionsUpdated'));
-  };
-
-  useEffect(() => {
-    const onNewChat = () => {
-      setActiveSessionId('');
-      localStorage.setItem(ACTIVE_TEXT_SESSION_KEY, '');
-      setMessages([]); setQuery(''); setHasStarted(false); setMessageFeedback({});
-      window.setTimeout(() => inputRef.current?.focus(), 0);
-    };
-    const onOpen = (e) => {
-      const id = e?.detail?.id;
-      if (!id) return;
-      const sessions = readJson(TEXT_SESSIONS_KEY, []);
-      const found = (Array.isArray(sessions) ? sessions : []).find(s => String(s.id) === String(id));
-      if (!found) return;
-      setActiveSessionId(String(id));
-      localStorage.setItem(ACTIVE_TEXT_SESSION_KEY, String(id));
-      setMessages(found.messages || []);
-      setHasStarted((found.messages || []).length > 0);
-      setMessageFeedback({});
-      window.setTimeout(() => inputRef.current?.focus(), 0);
-    };
-    window.addEventListener('oneai:newChat', onNewChat);
-    window.addEventListener('oneai:openTextSession', onOpen);
-    return () => { window.removeEventListener('oneai:newChat', onNewChat); window.removeEventListener('oneai:openTextSession', onOpen); };
   }, []);
 
-  useEffect(() => {
-    inputRef.current?.focus();
-    const onKey = (e) => {
-      const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
-      const mod = isMac ? e.metaKey : e.ctrlKey;
-      if (mod && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); inputRef.current?.focus(); }
-      if (mod && (e.key === 'c' || e.key === 'C') && !inputRef.current?.contains(document.activeElement)) {
-        e.preventDefault();
-        const last = [...messages].reverse().find(m => m.role === 'assistant');
-        if (last?.content) handleCopy(messages.lastIndexOf(last), last.content);
-      }
-      if (e.altKey && (e.key === 'n' || e.key === 'N')) { e.preventDefault(); window.dispatchEvent(new Event('oneai:newChat')); }
-      if (e.key === 'Escape' && isStreaming) { e.preventDefault(); handleStop(); }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [messages, isStreaming]);
-
-  const sendMessage = async (rawText) => {
+  const sendMessage = useCallback(async (rawText) => {
     const userMessage = (rawText || '').trim();
     if (!userMessage || isStreaming) return;
 
     setHasStarted(true);
     setQuery('');
+    setFirstUnreadIdx(null);
+    resetTextareaHeight();
 
     let sessionId = activeSessionId;
     if (!sessionId) {
@@ -525,26 +587,26 @@ function Homescreen() {
 
     const updatedMessages = [...messages, { role: 'user', content: userMessage }];
     const isFirst = updatedMessages.filter(m => m.role === 'user').length === 1;
-    persistSession(sessionId, updatedMessages, isFirst ? slugTitleFromText(userMessage) : undefined);
+    persistSession(sessionId, updatedMessages, isFirst ? slugTitle(userMessage) : undefined);
 
     await requestAssistantResponse(updatedMessages);
-  };
+  }, [isStreaming, activeSessionId, messages, persistSession, requestAssistantResponse, resetTextareaHeight]);
 
-  const handleSendClick = () => sendMessage(query);
+  const handleSendClick = useCallback(() => sendMessage(query), [sendMessage, query]);
 
-  const handleFeedback = (idx, type) =>
-    setMessageFeedback(prev => ({ ...prev, [idx]: prev[idx] === type ? null : type }));
+  const handleFeedback = useCallback((idx, type) =>
+    setMessageFeedback(prev => ({ ...prev, [idx]: prev[idx] === type ? null : type })), []);
 
-  const handleCopy = async (idx, text) => {
+  const handleCopy = useCallback(async (idx, text) => {
     if (!text) return;
     try {
       await navigator.clipboard.writeText(text);
       setCopiedMessageId(idx);
       window.setTimeout(() => setCopiedMessageId(prev => prev === idx ? null : prev), 1400);
-    } catch {}
-  };
+    } catch { }
+  }, []);
 
-  const handleRegenerate = async (assistantIndex) => {
+  const handleRegenerate = useCallback(async (assistantIndex) => {
     if (isStreaming) return;
     let ui = assistantIndex - 1;
     while (ui >= 0 && messages[ui]?.role !== 'user') ui--;
@@ -552,17 +614,37 @@ function Homescreen() {
     const ctx = messages.slice(0, ui + 1);
     setMessages(ctx);
     setHasStarted(true);
+    setFirstUnreadIdx(null);
     await requestAssistantResponse(ctx);
-  };
+  }, [isStreaming, messages, requestAssistantResponse]);
 
-  const handleInputKeyDown = (e) => {
+  const handleInputKeyDown = useCallback((e) => {
     if (e.isComposing) return;
     if (e.key === 'Escape' && isStreaming) { e.preventDefault(); handleStop(); return; }
     if (e.key !== 'Enter' && e.key !== 'NumpadEnter') return;
     if (e.shiftKey && !e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
     sendMessage(e.currentTarget.value);
-  };
+  }, [isStreaming, handleStop, sendMessage]);
+
+  // BUG FIX 7: close model dropdown when clicking outside
+  useEffect(() => {
+    if (!showModelDropdown) return;
+    const close = (e) => {
+      if (!e.target.closest('.model-dropdown-wrapper')) setShowModelDropdown(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [showModelDropdown]);
+
+  const suggestions = [
+    { icon: <Compass size={18} />, text: "Plan a 3-day trip to Tokyo" },
+    { icon: <Lightbulb size={18} />, text: "Explain quantum physics simply" },
+    { icon: <Code size={18} />, text: "Help me debug a React useEffect" },
+    { icon: <PenTool size={18} />, text: "Write a professional email for a job" },
+  ];
+
+  const phaseLabel = phase === 'deliberating' ? 'Deliberating…' : phase === 'synthesising' ? 'Synthesising…' : '';
 
   return (
     <div className="home-screen">
@@ -588,22 +670,34 @@ function Homescreen() {
         ) : (
           <div className="messages-list" ref={messagesListRef} onScroll={handleScroll}>
             {messages.map((msg, i) => (
-              <div key={i} className={`message message--${msg.role}`}>
-                <span className="message-role">{msg.role === 'user' ? 'You' : 'uXnAI'}</span>
+              <div
+                key={i}
+                className={`message message--${msg.role}`}
+                ref={el => { messageRefs.current[i] = el; }}
+              >
+                <span className="message-role">{msg.role === 'user' ? 'You' : 'Perception'}</span>
                 <div className="message-content">
-                  {msg.role === 'assistant' && i === messages.length - 1 && phase === 'gathering' && !msg.content && !msg.reasoning
+                  {msg.role === 'assistant' && i === messages.length - 1 && phase === 'deliberating'
+                    && !msg.content && Object.keys(msg.deliberation || {}).length === 0
                     ? <InsightLoader />
                     : <>
-                        {msg.reasoning && (
-                          <ThinkingBlock content={msg.reasoning} parseMarkdown={parseMarkdown} />
-                        )}
-                        {parseMarkdown(msg.content)}
-                      </>
+                      {msg.role === 'assistant' && Object.keys(msg.deliberation || {}).length > 0 && (
+                        <DeliberationPanel
+                          deliberation={msg.deliberation}
+                          activeRound={msg.activeRound || 1}
+                        />
+                      )}
+                      {msg.reasoning && (
+                        <ThinkingBlock content={msg.reasoning} parseMarkdown={parseMarkdown} />
+                      )}
+                      {parseMarkdown(msg.content)}
+                    </>
                   }
-                  {phase === 'streaming' && i === messages.length - 1 && msg.role === 'assistant' && (
+                  {phase === 'synthesising' && i === messages.length - 1 && msg.role === 'assistant' && (
                     <span className="cursor-blink" />
                   )}
                 </div>
+
                 {msg.role === 'assistant' && msg.content && phase === 'idle' && (
                   <div className="message-actions">
                     <button type="button" className={`message-action-btn ${messageFeedback[i] === 'like' ? 'active' : ''}`} onClick={() => handleFeedback(i, 'like')} title="Like"><ThumbsUp size={14} /></button>
@@ -618,9 +712,18 @@ function Homescreen() {
                 )}
               </div>
             ))}
-            {showScrollButton && (
-              <button type="button" className="scroll-to-bottom-btn" onClick={scrollToBottom} title="Scroll to latest">
-                <ChevronDown size={20} />
+
+            {showScrollBtn && (
+              <button
+                type="button"
+                className="scroll-to-bottom-btn"
+                onClick={scrollToFirstUnread}
+                title={firstUnreadIdx !== null ? 'Jump to first unread' : 'Scroll to bottom'}
+              >
+                {firstUnreadIdx !== null
+                  ? <><Zap size={14} /><span className="scroll-btn-label">New</span></>
+                  : <ChevronDown size={18} />
+                }
               </button>
             )}
           </div>
@@ -630,7 +733,13 @@ function Homescreen() {
       <div className="input-wrapper">
         <div>
           <div className="model-dropdown-wrapper">
-            <button className="model-tag" onClick={() => setShowModelDropdown(!showModelDropdown)} type="button">
+            {phase !== 'idle' && (
+              <span className="phase-indicator">
+                <span className="phase-dot" />
+                {phaseLabel}
+              </span>
+            )}
+            <button className="model-tag" onClick={() => setShowModelDropdown(o => !o)} type="button">
               <span className="model-dot" />{MODEL_DISPLAY}<span className="dropdown-arrow">▼</span>
             </button>
             {showModelDropdown && (
@@ -645,12 +754,14 @@ function Homescreen() {
             <textarea
               ref={inputRef}
               className="input-bar"
-              placeholder="Message uXnAI..."
+              placeholder="Message Perception..."
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                autoResizeTextarea(e.target);
+              }}
               onKeyDown={handleInputKeyDown}
               disabled={isStreaming}
-              rows={1}
             />
             {isStreaming ? (
               <button type="button" className="send-btn stop-btn" onClick={handleStop}><Square size={16} fill="currentColor" /></button>

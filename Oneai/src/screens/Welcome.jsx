@@ -18,7 +18,6 @@ const EmailIcon = () => (
 );
 
 export default function Welcome({ onTryFree, onGoogleLogin, onEmailLogin, authError }) {
-  const [mounted, setMounted] = useState(false);
   const [displayedText, setDisplayedText] = useState('');
   const texts = [
     'Welcome to the consensus',
@@ -30,10 +29,7 @@ export default function Welcome({ onTryFree, onGoogleLogin, onEmailLogin, authEr
   ];
   const animationState = useRef({ charIndex: 0, textIndex: 0, isErasing: false, isHolding: false });
 
-  useEffect(() => setMounted(true), []);
-
   useEffect(() => {
-    if (!mounted) return;
 
     const interval = setInterval(() => {
       const state = animationState.current;
@@ -65,9 +61,7 @@ export default function Welcome({ onTryFree, onGoogleLogin, onEmailLogin, authEr
     }, 100);
 
     return () => clearInterval(interval);
-  }, [mounted]);
-
-  if (!mounted) return null;
+  }, []);
 
   return (
     <div className="welcome-root">

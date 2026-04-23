@@ -56,7 +56,7 @@ export default function Sidebar({ onGoogleLogin, onEmailLogin, onEmailRegister, 
       <div className="auth-card">
         <div className="logo-block">
           <div>
-            <span className="logo-text">uXn<span>AI</span></span>
+            <span className="logo-text">Perception</span>
             <span className="logo-tag">Beta</span>
           </div>
           <div className="divider" />
